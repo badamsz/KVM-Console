@@ -26,6 +26,7 @@ final class AppModel {
     private(set) var devices: [Device] = []
     var selection: TargetSelection?
     var editorRequest: EditorRequest?
+    var updateRequest: UpdateRequest?
     var lastError: String?
     private(set) var sessions: [UUID: DeviceSession] = [:]
 
@@ -72,6 +73,7 @@ final class AppModel {
         sessions[deviceID] = nil
         devices.removeAll { $0.id == deviceID }
         credentials.deletePassword(for: deviceID)
+        credentials.deletePassword(for: deviceID, kind: .root)
         if selection?.deviceID == deviceID { selection = nil }
         persist()
     }

@@ -160,6 +160,20 @@ public final class KVMDClient: Sendable {
         return session.webSocketTask(with: req)
     }
 
+    /// Opens an authenticated websocket to a path on this PiKVM, e.g. the
+    /// web terminal. `protocols` are offered as websocket subprotocols.
+    public func webSocket(path: String, protocols: [String] = []) throws -> URLSessionWebSocketTask {
+        var req = try makeRequest(path)
+        guard var comps = URLComponents(url: req.url!, resolvingAgainstBaseURL: false) else { throw KVMDError.invalidURL }
+        comps.scheme = (comps.scheme == "http") ? "ws" : "wss"
+        req.url = comps.url
+        req.timeoutInterval = 15
+        if !protocols.isEmpty {
+            req.setValue(protocols.joined(separator: ", "), forHTTPHeaderField: "Sec-WebSocket-Protocol")
+        }
+        return session.webSocketTask(with: req)
+    }
+
     /// The certificate fingerprint this client trusts (pinned or observed).
     public var effectivePinnedSHA256: String? { pinnedSHA256 ?? trustDelegate.observedSHA256 }
 
