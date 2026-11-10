@@ -15,7 +15,7 @@ final class ModelTests: XCTestCase {
     }
 
     func testSyncTargetsKeepsPerPortMouseMode() {
-        var device = Device(name: "Rack", model: .plus)
+        var device = Device(name: "Rack", model: .v4Plus)
         device.syncTargets(withSwitchPorts: (0..<4).map { SwitchPortInfo(index: $0) })
         XCTAssertEqual(device.targets.map(\.name), ["Port 1", "Port 2", "Port 3", "Port 4"])
         device.targets[1].mouseMode = .relative
@@ -38,6 +38,14 @@ final class ModelTests: XCTestCase {
         device.syncTargets(withSwitchPorts: [])
         XCTAssertEqual(device.targets.count, 1)
         XCTAssertEqual(device.targets[0].mouseMode, .relative)
+    }
+
+    func testLegacyModelValuesStillDecode() throws {
+        let decode = { (raw: String) in try JSONDecoder().decode(PiKVMModel.self, from: Data("\"\(raw)\"".utf8)) }
+        XCTAssertEqual(try decode("v3Lite"), .v4Mini)
+        XCTAssertEqual(try decode("plus"), .v4Plus)
+        XCTAssertEqual(try decode("v4Mini"), .v4Mini)
+        XCTAssertEqual(try decode("something-new"), .other)
     }
 
     func testDeviceStoreRoundTrip() throws {

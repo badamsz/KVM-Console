@@ -4,10 +4,8 @@ import Foundation
 /// the authoritative capabilities come from `/api/info` and friends.
 public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
     case v3
-    case v3Lite
     case v4Mini
     case v4Plus
-    case plus
     case other
 
     public var id: String { rawValue }
@@ -15,11 +13,20 @@ public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
     public var displayName: String {
         switch self {
         case .v3: return "PiKVM V3"
-        case .v3Lite: return "PiKVM V3 Lite"
         case .v4Mini: return "PiKVM V4 Mini"
         case .v4Plus: return "PiKVM V4 Plus"
-        case .plus: return "PiKVM Plus"
         case .other: return "Other / DIY"
+        }
+    }
+
+    /// Unknown values (including ones written by early builds) decode
+    /// instead of failing the whole device list.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "v3Lite": self = .v4Mini
+        case "plus": self = .v4Plus
+        default: self = PiKVMModel(rawValue: raw) ?? .other
         }
     }
 }
