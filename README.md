@@ -4,10 +4,10 @@ A native macOS app (macOS 14+) for remote control and management of [PiKVM](http
 
 ## Status
 
-Step 2 of 4 in progress: the console works over MJPEG; H.264 and audio (WebRTC) come next.
+Step 2 of 4: the console, with H.264 video and audio over WebRTC and MJPEG as a fallback.
 
 1. **Foundation**: device list, LAN → Tailscale fallback, Keychain credentials, kvmd API client, PiKVM Switch ports as targets, per-port mouse mode. ✅
-2. **Console**: MJPEG video, keyboard and mouse (absolute and relative), full screen. ✅ H.264 video and audio over WebRTC: next.
+2. **Console**: H.264 video and audio (WebRTC), MJPEG fallback, keyboard and mouse (absolute and relative), full screen. ✅
 3. **Management**: ISO upload and mounting, ATX power, switch port control.
 4. **Polish**: menu bar quick view, shortcuts, signed build.
 
@@ -31,6 +31,7 @@ Run the library tests without Xcode with `swift test --package-path Packages/PiK
 - Select a machine and choose **Open Console** (⌘↩). Each machine gets its own window; ⌃⌘F toggles full screen.
 - **Absolute mouse**: the pointer follows your cursor. **Relative mouse**: click the video to capture the cursor, press Control+Option to release it. The mode is saved per machine (per Switch port).
 - While the console has focus, Command shortcuts go to the remote machine (⌘ is sent as the Windows/Super key). macOS keeps a few for itself, such as ⌘Tab; use the **Send Keys** menu for Ctrl+Alt+Del and similar.
+- **Video** menu: H.264 (WebRTC) is the default and carries audio; MJPEG is the fallback and is used automatically if H.264 can't connect. The **Audio** menu appears when the PiKVM offers audio.
 - Keys are sent by physical position, so the remote machine's keyboard layout decides the character.
 
 ## Updating a PiKVM

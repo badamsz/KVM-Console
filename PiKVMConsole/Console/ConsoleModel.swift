@@ -3,6 +3,45 @@ import Foundation
 import Observation
 import PiKVMKit
 
+/// How the console receives video.
+enum VideoMode: String, CaseIterable, Identifiable {
+    /// H.264 video and audio over WebRTC. Sharper motion and far less bandwidth.
+    case h264
+    /// A stream of JPEG images. Works everywhere, no audio.
+    case mjpeg
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .h264: return "H.264 (WebRTC)"
+        case .mjpeg: return "MJPEG"
+        }
+    }
+}
+
+/// Console preferences shared by all console windows.
+enum ConsolePreferences {
+    private static let videoModeKey = "console.videoMode"
+    private static let volumeKey = "console.volume"
+    private static let mutedKey = "console.muted"
+
+    static var videoMode: VideoMode {
+        get { VideoMode(rawValue: UserDefaults.standard.string(forKey: videoModeKey) ?? "") ?? .h264 }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: videoModeKey) }
+    }
+
+    static var volume: Double {
+        get { UserDefaults.standard.object(forKey: volumeKey) as? Double ?? 1 }
+        set { UserDefaults.standard.set(newValue, forKey: volumeKey) }
+    }
+
+    static var muted: Bool {
+        get { UserDefaults.standard.bool(forKey: mutedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: mutedKey) }
+    }
+}
+
 /// Drives one console window: keeps the kvmd session socket open (which
 /// also keeps the video streamer running), reads video frames, and sends
 /// keyboard and mouse input.
@@ -26,9 +65,31 @@ final class ConsoleModel {
     /// True while the Mac cursor is captured for relative mouse mode.
     var mouseCaptured = false
 
+    /// The mode the user asked for.
+    private(set) var videoMode = ConsolePreferences.videoMode
+    /// The mode in use right now; differs from `videoMode` after a fallback.
+    private(set) var activeVideoMode: VideoMode = .mjpeg
+    /// Set when H.264 was requested but the console fell back to MJPEG.
+    private(set) var fallbackReason: String?
+    /// The view WebRTC draws into, while H.264 is active.
+    private(set) var webRTCView: NSView?
+    /// Whether this PiKVM offers audio (only known in H.264 mode).
+    private(set) var audioAvailable = false
+    var volume = ConsolePreferences.volume {
+        didSet { ConsolePreferences.volume = volume; webRTC?.volume = volume }
+    }
+    var muted = ConsolePreferences.muted {
+        didSet { ConsolePreferences.muted = muted; webRTC?.muted = muted }
+    }
+
     private weak var app: AppModel?
     private var socket: URLSessionWebSocketTask?
     private var streamer: MJPEGStreamer?
+    private var webRTC: WebRTCStream?
+    private var webRTCUp = false
+    private var webRTCWatchdog: Task<Void, Never>?
+    /// H.264 failed on this connection, so don't retry it until the user asks.
+    private var h264Unavailable = false
     private var runTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
     private var frameCount = 0
@@ -72,8 +133,30 @@ final class ConsoleModel {
         pingTask = nil
         streamer?.stop()
         streamer = nil
+        stopWebRTC()
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
+    }
+
+    private func stopWebRTC() {
+        webRTCWatchdog?.cancel()
+        webRTCWatchdog = nil
+        webRTC?.onEvent = nil
+        webRTC?.stop()
+        webRTC = nil
+        webRTCView = nil
+        webRTCUp = false
+        audioAvailable = false
+    }
+
+    /// Switches between H.264 and MJPEG and reconnects the video.
+    func setVideoMode(_ mode: VideoMode) {
+        ConsolePreferences.videoMode = mode
+        videoMode = mode
+        h264Unavailable = false
+        fallbackReason = nil
+        // Dropping the socket makes the run loop reconnect with the new mode.
+        socket?.cancel(with: .goingAway, reason: nil)
     }
 
     /// Connects and runs until the socket or stream drops.
@@ -83,7 +166,7 @@ final class ConsoleModel {
             state = .failed("This machine is no longer configured.")
             return false
         }
-        if frame == nil { state = .connecting }
+        if frame == nil, webRTCView == nil { state = .connecting }
         let session = app.session(for: selection.deviceID)
         await session.connectIfNeeded()
         guard let client = session.client else {
@@ -117,7 +200,11 @@ final class ConsoleModel {
 
             // kvmd starts the streamer once a stream=1 socket exists; give it a moment.
             try? await Task.sleep(nanoseconds: 500_000_000)
-            startStream(client: client, generation: gen)
+            if videoMode == .h264, !h264Unavailable {
+                startWebRTC(client: client, generation: gen)
+            } else {
+                startStream(client: client, generation: gen)
+            }
 
             // Drain the socket; it ends (throws) when the connection drops.
             while !Task.isCancelled {
@@ -140,8 +227,66 @@ final class ConsoleModel {
         return wasLive
     }
 
+    // MARK: H.264 (WebRTC)
+
+    private func startWebRTC(client: KVMDClient, generation gen: Int) {
+        guard gen == generation else { return }
+        activeVideoMode = .h264
+        frame = nil
+        let stream = WebRTCStream()
+        stream.volume = volume
+        stream.muted = muted
+        stream.onEvent = { [weak self] event in
+            self?.handleWebRTC(event, client: client, generation: gen)
+        }
+        webRTC = stream
+        webRTCView = stream.videoView
+        stream.start(client: client, wantAudio: true)
+
+        // If the media connection never comes up, use MJPEG instead.
+        webRTCWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            guard !Task.isCancelled, let self, gen == self.generation, !self.webRTCUp else { return }
+            self.fallBackToMJPEG("H.264 didn't connect.", client: client, generation: gen)
+        }
+    }
+
+    private func handleWebRTC(_ event: WebRTCStream.Event, client: KVMDClient, generation gen: Int) {
+        guard gen == generation else { return }
+        switch event {
+        case .connected:
+            webRTCUp = true
+            webRTCWatchdog?.cancel()
+            if videoSize != .zero, state == .connecting { state = .live }
+        case .videoSize(let size):
+            guard size.width > 0, size.height > 0 else { return }
+            videoSize = size
+            if state != .noSignal { state = .live }
+        case .audioAvailable(let available):
+            audioAvailable = available
+        case .ended(let error):
+            if webRTCUp {
+                // It was working: reconnect the whole session.
+                socket?.cancel(with: .goingAway, reason: nil)
+            } else {
+                fallBackToMJPEG(error ?? "H.264 isn't available on this PiKVM.", client: client, generation: gen)
+            }
+        }
+    }
+
+    private func fallBackToMJPEG(_ reason: String, client: KVMDClient, generation gen: Int) {
+        guard gen == generation else { return }
+        stopWebRTC()
+        h264Unavailable = true
+        fallbackReason = reason
+        startStream(client: client, generation: gen)
+    }
+
+    // MARK: MJPEG
+
     private func startStream(client: KVMDClient, generation gen: Int) {
         guard gen == generation else { return }
+        activeVideoMode = .mjpeg
         streamer?.stop()
         streamer = try? MJPEGStreamer(client: client, onFrame: { [weak self] data in
             guard let image = ConsoleModel.decode(data) else { return }
@@ -180,7 +325,12 @@ final class ConsoleModel {
             fps = 0
             state = .noSignal
         } else if state == .noSignal {
-            state = frame == nil ? .connecting : .live
+            if activeVideoMode == .h264 {
+                // WebRTC keeps its connection; frames simply resume.
+                state = (webRTCUp && videoSize != .zero) ? .live : .connecting
+            } else {
+                state = frame == nil ? .connecting : .live
+            }
         }
     }
 
