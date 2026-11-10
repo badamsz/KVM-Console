@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import PiKVMKit
 
-struct TargetSelection: Hashable {
+struct TargetSelection: Hashable, Codable {
     let deviceID: UUID
     let targetID: UUID
 }

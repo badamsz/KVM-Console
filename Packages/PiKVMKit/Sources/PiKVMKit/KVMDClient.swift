@@ -26,6 +26,7 @@ public final class KVMDClient: Sendable {
     private let username: String
     private let password: String
     private let session: URLSession
+    private let pinnedSHA256: String?
     public let trustDelegate: CertificatePinningDelegate
 
     /// - Parameters:
@@ -34,6 +35,7 @@ public final class KVMDClient: Sendable {
         self.baseURL = baseURL
         self.username = username
         self.password = password
+        self.pinnedSHA256 = pinnedSHA256
         let delegate = CertificatePinningDelegate(pinnedSHA256: pinnedSHA256)
         self.trustDelegate = delegate
         let config = URLSessionConfiguration.ephemeral
@@ -46,7 +48,9 @@ public final class KVMDClient: Sendable {
 
     // MARK: Requests
 
-    func makeRequest(_ path: String, method: String = "GET", query: [String: String] = [:]) throws -> URLRequest {
+    /// Builds an authenticated request for a path on this PiKVM (kvmd API,
+    /// `streamer/...`, etc.).
+    public func makeRequest(_ path: String, method: String = "GET", query: [String: String] = [:]) throws -> URLRequest {
         guard var comps = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
             throw KVMDError.invalidURL
         }
@@ -141,6 +145,23 @@ public final class KVMDClient: Sendable {
         _ = try await send(Empty.self, "api/switch/atx/click", method: "POST",
                            query: ["port": String(port), "button": button.rawValue])
     }
+
+    // MARK: Console
+
+    /// Opens the session websocket used by the console. `stream=1` asks kvmd
+    /// to keep the video streamer running while this socket is open; HID
+    /// events are sent over the same socket (see `HIDMessage`).
+    public func consoleSocket() throws -> URLSessionWebSocketTask {
+        var req = try makeRequest("api/ws", query: ["stream": "1"])
+        guard var comps = URLComponents(url: req.url!, resolvingAgainstBaseURL: false) else { throw KVMDError.invalidURL }
+        comps.scheme = (comps.scheme == "http") ? "ws" : "wss"
+        req.url = comps.url
+        req.timeoutInterval = 15
+        return session.webSocketTask(with: req)
+    }
+
+    /// The certificate fingerprint this client trusts (pinned or observed).
+    public var effectivePinnedSHA256: String? { pinnedSHA256 ?? trustDelegate.observedSHA256 }
 
     // MARK: Events
 
