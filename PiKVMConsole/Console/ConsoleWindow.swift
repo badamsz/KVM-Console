@@ -39,8 +39,8 @@ private struct ConsoleContent: View {
             ConsoleVideoView(model: model, frame: model.frame, mouseMode: model.mouseMode, captured: model.mouseCaptured)
             overlay
         }
-        .background(Color.black)
-        .ignoresSafeArea()
+        // The video stays below the toolbar; only the black backdrop extends under it.
+        .background(Color.black.ignoresSafeArea())
         .navigationTitle(model.target?.name ?? "Console")
         .navigationSubtitle(subtitle)
         .toolbar {
