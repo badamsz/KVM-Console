@@ -1,0 +1,9 @@
+// Copy this file to Local.xcconfig, set your team ID, then run `xcodegen generate`.
+//
+// A free personal team is enough. To find the ID: open Keychain Access, find
+// your "Apple Development: …" certificate, and copy its "Organizational Unit"
+// (10 characters). If you have no such certificate yet, add your Apple ID
+// under Xcode > Settings > Accounts, then Manage Certificates > + > Apple Development.
+
+DEVELOPMENT_TEAM = XXXXXXXXXX
+PIKVM_CODE_SIGN_IDENTITY = Apple Development
