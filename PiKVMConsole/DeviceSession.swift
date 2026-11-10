@@ -162,4 +162,13 @@ final class DeviceSession {
         guard let atx, atx.enabled else { return nil }
         return (atx.leds.power, atx.leds.hdd)
     }
+
+    /// Whether an ATX action is still running for a target, so another can't start yet.
+    func atxBusy(for target: Target) -> Bool {
+        if let port = target.switchPort {
+            guard let busy = switchState?.atxBusy, port < busy.count else { return false }
+            return busy[port]
+        }
+        return atx?.busy ?? false
+    }
 }

@@ -33,11 +33,36 @@ struct ConsoleWindow: View {
 private struct ConsoleContent: View {
     @Environment(AppModel.self) private var app
     let model: ConsoleModel
+    @State private var pendingPower: PowerConfirmation?
+    @State private var powerActionRunning = false
+
+    /// Power actions that interrupt the machine and so ask first.
+    private enum PowerConfirmation {
+        case reset, forceOff
+    }
 
     var body: some View {
+        let session = app.session(for: model.selection.deviceID)
         ZStack {
             ConsoleVideoView(model: model, frame: model.frame, liveView: model.webRTCView, videoSize: model.videoSize,
                              mouseMode: model.mouseMode, captured: model.mouseCaptured)
+                .confirmationDialog(
+                    pendingPower == .reset ? "Reset \(model.target?.name ?? "this machine")?" : "Force off \(model.target?.name ?? "this machine")?",
+                    isPresented: Binding(get: { pendingPower != nil }, set: { if !$0 { pendingPower = nil } }),
+                    presenting: pendingPower
+                ) { action in
+                    switch action {
+                    case .reset:
+                        Button("Reset", role: .destructive) { runPower(session) { try await session.click(.reset, for: $0) } }
+                    case .forceOff:
+                        Button("Force Off", role: .destructive) { runPower(session) { try await session.power(.offHard, for: $0) } }
+                    }
+                } message: { action in
+                    switch action {
+                    case .reset: Text("This presses the reset button and may lose unsaved work.")
+                    case .forceOff: Text("This holds the power button and may lose unsaved work.")
+                    }
+                }
             overlay
             pasteStatus
         }
@@ -64,6 +89,36 @@ private struct ConsoleContent: View {
                 }
                 .pickerStyle(.segmented)
                 .help("Mouse mode for this machine")
+
+                // Only machines with ATX wired up (directly or through the Switch) get these.
+                if let target = model.target, let leds = session.leds(for: target) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "power")
+                            .foregroundStyle(leds.power ? Color.green : Color.secondary.opacity(0.4))
+                            .help(leds.power ? "Power is on" : "Power is off")
+                            .accessibilityLabel(leds.power ? "Power on" : "Power off")
+                        Image(systemName: "internaldrive")
+                            .foregroundStyle(leds.hdd ? Color.orange : Color.secondary.opacity(0.4))
+                            .help("Disk activity")
+                            .accessibilityLabel(leds.hdd ? "Disk active" : "Disk idle")
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .padding(.horizontal, 4)
+
+                    Menu {
+                        Button("Power On") { runPower(session) { try await session.power(.on, for: $0) } }
+                            .disabled(leds.power)
+                        Button("Shut Down") { runPower(session) { try await session.power(.off, for: $0) } }
+                            .disabled(!leds.power)
+                        Divider()
+                        Button("Reset…") { pendingPower = .reset }
+                        Button("Force Off…") { pendingPower = .forceOff }
+                    } label: {
+                        Label("Power", systemImage: "bolt")
+                    }
+                    .disabled(powerActionRunning || session.atxBusy(for: target))
+                    .help("Power controls for this machine")
+                }
 
                 Menu {
                     Picker("Video", selection: Binding(get: { model.videoMode }, set: { model.setVideoMode($0) })) {
@@ -127,6 +182,15 @@ private struct ConsoleContent: View {
                 }
                 .help("Full screen (Ctrl+Cmd+F)")
             }
+        }
+    }
+
+    private func runPower(_ session: DeviceSession, _ action: @escaping (Target) async throws -> Void) {
+        guard let target = model.target else { return }
+        Task {
+            powerActionRunning = true
+            defer { powerActionRunning = false }
+            do { try await action(target) } catch { app.lastError = error.localizedDescription }
         }
     }
 
