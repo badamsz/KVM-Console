@@ -351,7 +351,7 @@ final class ConsoleNSView: NSView {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags.contains([.command, .control]), event.keyCode == 3 { return false }
         // Option+Cmd+V types the Mac clipboard on the remote machine.
-        if flags == [.command, .option], event.keyCode == 9 {
+        if flags.subtracting([.capsLock, .numericPad, .function]) == [.command, .option], event.keyCode == 9 {
             if !event.isARepeat {
                 // Let go of Option and Command on the remote first, or they'd modify the typed text.
                 releaseKeys()
