@@ -1,0 +1,11 @@
+// Build settings shared by every configuration.
+//
+// Signing: with no team set, Xcode signs each build "to run locally". Every
+// such build looks like a different app to the Keychain, so macOS asks for
+// permission to read the saved device passwords again after each rebuild.
+// Copy Local.xcconfig.example to Local.xcconfig and fill in your team to sign
+// with a stable identity instead. Local.xcconfig is not committed.
+
+PIKVM_CODE_SIGN_IDENTITY = -
+
+#include? "Local.xcconfig"

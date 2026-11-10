@@ -21,6 +21,18 @@ open PiKVMConsole.xcodeproj
 
 Run the library tests without Xcode with `swift test --package-path Packages/PiKVMKit`.
 
+### Signing (stops the repeated Keychain prompt)
+
+Without a signing team, Xcode signs each build "to run locally", and every rebuild looks like a new app to the Keychain. macOS then asks again for permission to read the saved device passwords ("PiKVM Console wants to use your confidential information stored in com.badamsz.PiKVMConsole"). To sign with a stable identity:
+
+```sh
+cp Config/Local.xcconfig.example Config/Local.xcconfig
+# edit Config/Local.xcconfig and set DEVELOPMENT_TEAM to your 10-character team ID
+xcodegen generate
+```
+
+A free personal team works. `Config/Local.xcconfig` is ignored by git and survives `xcodegen generate`. The first launch after this asks once more; choose **Always Allow** and it stays quiet from then on.
+
 ## Layout
 
 - `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/switch`, `/api/ws`), Keychain and JSON storage.
