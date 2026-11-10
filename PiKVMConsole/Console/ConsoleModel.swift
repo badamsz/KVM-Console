@@ -25,6 +25,8 @@ enum ConsolePreferences {
     private static let videoModeKey = "console.videoMode"
     private static let volumeKey = "console.volume"
     private static let mutedKey = "console.muted"
+    /// Whether the toolbar is hidden while a console is in full screen. On unless turned off.
+    static let hideToolbarInFullScreenKey = "console.hideToolbarInFullScreen"
 
     static var videoMode: VideoMode {
         get { VideoMode(rawValue: UserDefaults.standard.string(forKey: videoModeKey) ?? "") ?? .h264 }
@@ -64,6 +66,8 @@ final class ConsoleModel {
     private(set) var fps: Int = 0
     /// True while the Mac cursor is captured for relative mouse mode.
     var mouseCaptured = false
+    /// True while this console's window is in full screen.
+    var isFullScreen = false
 
     /// The mode the user asked for.
     private(set) var videoMode = ConsolePreferences.videoMode

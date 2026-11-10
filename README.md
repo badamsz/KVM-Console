@@ -40,7 +40,7 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 
 ## Using the console
 
-- Select a machine and choose **Open Console** (⌘↩). Each machine gets its own window; ⌃⌘F toggles full screen.
+- Select a machine and choose **Open Console** (⌘↩). Each machine gets its own window; ⌃⌘F toggles full screen. In full screen the toolbar is hidden so the video fills the display. **View → Hide Toolbar in Full Screen** (⌃⌘T) brings it back or hides it again; move the pointer to the top edge to reach the menu bar.
 - **Absolute mouse**: the pointer follows your cursor. **Relative mouse**: click the video to capture the cursor, press Control+Option to release it. The mode is saved per machine (per Switch port).
 - While the console has focus, Command shortcuts go to the remote machine (⌘ is sent as the Windows/Super key). macOS keeps a few for itself, such as ⌘Tab; use the **Send Keys** menu for Ctrl+Alt+Del and similar.
 - When a machine has ATX wired up (directly or through the Switch), the console toolbar shows its power and disk-activity lights and a **Power** menu with Power On, Shut Down, Reset and Force Off. Reset and Force Off ask first. Machines without ATX don't show them.

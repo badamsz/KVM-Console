@@ -27,8 +27,13 @@ struct PiKVMConsoleApp: App {
 struct AppCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
 
     var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            Toggle("Hide Toolbar in Full Screen", isOn: $hideToolbarInFullScreen)
+                .keyboardShortcut("t", modifiers: [.command, .control])
+        }
         CommandGroup(after: .newItem) {
             Button("Add Device…") { model.editorRequest = .new }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
