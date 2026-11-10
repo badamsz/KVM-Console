@@ -189,7 +189,7 @@ final class ConsoleModel {
     /// Retry the stream alone; a lost connection is handled by the socket.
     private func streamEnded(_ error: Error?, client: KVMDClient, generation gen: Int) {
         guard gen == generation else { return }
-        if case KVMDError.unauthorized? = error {
+        if let kvmdError = error as? KVMDError, case .unauthorized = kvmdError {
             state = .failed(KVMDError.unauthorized.localizedDescription)
             socket?.cancel(with: .goingAway, reason: nil)
             return
