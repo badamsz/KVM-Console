@@ -6,6 +6,7 @@ struct TargetDetailView: View {
     let device: Device
     let target: Target
 
+    @Environment(\.openWindow) private var openWindow
     @State private var confirmHardOff = false
     @State private var busy = false
 
@@ -47,7 +48,13 @@ struct TargetDetailView: View {
                     Text("Relative mode isn't enabled on this PiKVM. Turn on the alternate mouse in kvmd's OTG settings.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Text("The remote console arrives in the next step.").foregroundStyle(.secondary)
+                Button {
+                    openWindow(value: TargetSelection(deviceID: device.id, targetID: target.id))
+                } label: {
+                    Label("Open Console", systemImage: "display")
+                }
+                .controlSize(.large)
+                .disabled(session.client == nil)
             }
 
             Section("Power") {
