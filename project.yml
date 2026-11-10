@@ -1,0 +1,47 @@
+# Generate PiKVMConsole.xcodeproj with:  xcodegen generate
+name: PiKVMConsole
+options:
+  bundleIdPrefix: com.badamsz
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+packages:
+  PiKVMKit:
+    path: Packages/PiKVMKit
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PiKVMConsole:
+    type: application
+    platform: macOS
+    sources:
+      - PiKVMConsole
+    dependencies:
+      - package: PiKVMKit
+    info:
+      path: PiKVMConsole/Info.plist
+      properties:
+        CFBundleDisplayName: PiKVM Console
+        LSApplicationCategoryType: public.app-category.utilities
+        NSLocalNetworkUsageDescription: PiKVM Console connects to PiKVM devices on your local network.
+    entitlements:
+      path: PiKVMConsole/PiKVMConsole.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.badamsz.PiKVMConsole
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  PiKVMConsole:
+    build:
+      targets:
+        PiKVMConsole: all
+    test:
+      targets:
+        - package: PiKVMKit/PiKVMKitTests
