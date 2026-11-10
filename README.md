@@ -33,6 +33,12 @@ Run the library tests without Xcode with `swift test --package-path Packages/PiK
 - While the console has focus, Command shortcuts go to the remote machine (⌘ is sent as the Windows/Super key). macOS keeps a few for itself, such as ⌘Tab; use the **Send Keys** menu for Ctrl+Alt+Del and similar.
 - Keys are sent by physical position, so the remote machine's keyboard layout decides the character.
 
+## Updating a PiKVM
+
+**Update PiKVM OS…** (toolbar, or right-click a device) runs `pikvm-update` through the PiKVM's web terminal, so it works over the same HTTPS connection as everything else and needs no SSH access. It asks for the device's root password, which can be saved in the Keychain. The update is started detached from the terminal and its log is followed, so a dropped connection or closing the window doesn't interrupt it. The PiKVM reboots itself when updates were installed.
+
+Requires the web terminal (`kvmd-webterm`), which PiKVM OS enables by default.
+
 ## Notes
 
 - PiKVMs use self-signed certificates. The app pins the certificate's SHA-256 the first time it connects and rejects a different one after that. Editing a device's addresses clears the pin.

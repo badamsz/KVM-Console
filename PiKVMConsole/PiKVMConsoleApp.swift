@@ -63,6 +63,10 @@ struct ContentView: View {
         .sheet(item: $model.editorRequest) { request in
             DeviceEditorView(request: request)
         }
+        .sheet(item: $model.updateRequest) { request in
+            DeviceUpdateView(deviceID: request.deviceID)
+                .interactiveDismissDisabled()
+        }
         .alert("Error", isPresented: .constant(model.lastError != nil), presenting: model.lastError) { _ in
             Button("OK") { model.lastError = nil }
         } message: { Text($0) }

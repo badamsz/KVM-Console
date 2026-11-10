@@ -81,6 +81,10 @@ struct TargetDetailView: View {
         .toolbar {
             Button { Task { await session.connect() } } label: { Label("Reconnect", systemImage: "arrow.clockwise") }
             Button { model.editorRequest = .edit(device.id) } label: { Label("Edit Device", systemImage: "slider.horizontal.3") }
+            Button { model.updateRequest = UpdateRequest(deviceID: device.id) } label: {
+                Label("Update PiKVM OS", systemImage: "arrow.down.circle")
+            }
+            .help("Run pikvm-update on this PiKVM")
         }
         .confirmationDialog("Force off \(target.name)?", isPresented: $confirmHardOff) {
             Button("Force Off", role: .destructive) { run { try await session.power(.offHard, for: target) } }
