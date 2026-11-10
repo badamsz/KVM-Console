@@ -129,12 +129,21 @@ final class ConsoleNSView: NSView {
                                                name: NSWindow.didResignKeyNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(windowLostFocus),
                                                name: NSApplication.didResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(fullScreenChanged(_:)),
+                                               name: NSWindow.didEnterFullScreenNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(fullScreenChanged(_:)),
+                                               name: NSWindow.willExitFullScreenNotification, object: window)
+        model.isFullScreen = window.styleMask.contains(.fullScreen)
         window.makeFirstResponder(self)
         startMoveTimer()
     }
 
     @objc private func windowLostFocus() {
         releaseEverything()
+    }
+
+    @objc private func fullScreenChanged(_ note: Notification) {
+        model.isFullScreen = note.name == NSWindow.didEnterFullScreenNotification
     }
 
     override func resignFirstResponder() -> Bool {
@@ -350,6 +359,8 @@ final class ConsoleNSView: NSView {
         // Keep Ctrl+Cmd+F (full screen) for the Mac.
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags.contains([.command, .control]), event.keyCode == 3 { return false }
+        // Keep Ctrl+Cmd+T (show or hide the toolbar in full screen) for the Mac too.
+        if flags.contains([.command, .control]), event.keyCode == 17 { return false }
         // Option+Cmd+V types the Mac clipboard on the remote machine.
         if flags.subtracting([.capsLock, .numericPad, .function]) == [.command, .option], event.keyCode == 9 {
             if !event.isARepeat {

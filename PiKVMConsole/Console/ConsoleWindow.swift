@@ -34,6 +34,7 @@ private struct ConsoleContent: View {
     @Environment(AppModel.self) private var app
     let model: ConsoleModel
     @State private var pendingPower: PowerConfirmation?
+    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
     @State private var powerActionRunning = false
 
     /// Power actions that interrupt the machine and so ask first.
@@ -82,6 +83,8 @@ private struct ConsoleContent: View {
         .background(Color.black.ignoresSafeArea())
         .navigationTitle(model.target?.name ?? "Console")
         .navigationSubtitle(subtitle)
+        // In full screen the video can have the whole display; View > Hide Toolbar in Full Screen turns this off.
+        .toolbar(model.isFullScreen && hideToolbarInFullScreen ? .hidden : .automatic, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup {
                 Picker("Mouse", selection: Binding(get: { model.mouseMode }, set: { model.setMouseMode($0) })) {
