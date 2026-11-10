@@ -176,3 +176,14 @@ public struct KVMDEvent: Decodable, Sendable, Hashable {
         case event
     }
 }
+
+extension KVMDEvent {
+    /// For a `streamer` event: whether the video source has a signal.
+    /// Returns nil for other events, or when the event doesn't say
+    /// (kvmd sends partial updates, and `streamer` is null while it starts).
+    public var streamerSourceOnline: Bool? {
+        guard eventType == "streamer",
+              case .bool(let online)? = event["streamer"]?["source"]?["online"] else { return nil }
+        return online
+    }
+}
