@@ -82,6 +82,21 @@ final class ConsoleModel {
         didSet { ConsolePreferences.muted = muted; webRTC?.muted = muted }
     }
 
+    struct PasteProgress: Equatable {
+        let typed: Int
+        let total: Int
+    }
+
+    /// Set while pasted text is being typed.
+    private(set) var pasteProgress: PasteProgress?
+    /// Clipboard text waiting for the user to confirm.
+    var pendingPaste: String?
+    /// How fast pasted text is typed. Shared by all consoles.
+    var typingRate = TypingRate(rawValue: UserDefaults.standard.string(forKey: "console.typingRate") ?? "") ?? .normal {
+        didSet { UserDefaults.standard.set(typingRate.rawValue, forKey: "console.typingRate") }
+    }
+    private var pasteTask: Task<Void, Never>?
+
     private weak var app: AppModel?
     private var socket: URLSessionWebSocketTask?
     private var streamer: MJPEGStreamer?
@@ -122,6 +137,7 @@ final class ConsoleModel {
     }
 
     func stop() {
+        pasteTask?.cancel()
         runTask?.cancel()
         runTask = nil
         teardown()
@@ -381,6 +397,60 @@ final class ConsoleModel {
     func mouseWheel(dx: Int, dy: Int) {
         guard dx != 0 || dy != 0 else { return }
         send(HIDMessage.mouseWheel(dx: dx, dy: dy))
+    }
+
+    // MARK: Paste
+
+    /// Reads the Mac clipboard and types it on the remote machine. Long or
+    /// multi-line text is held in `pendingPaste` for confirmation first.
+    func pasteClipboard() {
+        guard pasteProgress == nil else { return }
+        guard let raw = NSPasteboard.general.string(forType: .string) else {
+            app?.lastError = "The clipboard has no text to paste."
+            return
+        }
+        let text = TextPaste.normalize(raw)
+        guard !text.isEmpty else {
+            app?.lastError = "The clipboard has no text to paste."
+            return
+        }
+        if text.count > 200 || text.contains("\n") {
+            pendingPaste = text
+        } else {
+            typeText(text)
+        }
+    }
+
+    /// Types `text` on the remote machine at the chosen typing rate.
+    func typeText(_ text: String) {
+        pendingPaste = nil
+        guard pasteProgress == nil, let app, let client = app.session(for: selection.deviceID).client else { return }
+        let chunks = TextPaste.chunks(text)
+        let total = text.count
+        let delay = typingRate.delay
+        pasteProgress = PasteProgress(typed: 0, total: total)
+        pasteTask = Task { [weak self] in
+            var typed = 0
+            do {
+                for chunk in chunks {
+                    try Task.checkCancellation()
+                    try await client.typeText(chunk, delay: delay)
+                    typed += chunk.count
+                    self?.pasteProgress = PasteProgress(typed: typed, total: total)
+                }
+            } catch is CancellationError {
+            } catch {
+                if !Task.isCancelled { app.lastError = "Paste stopped after \(typed) of \(total) characters: \(error.localizedDescription)" }
+            }
+            self?.pasteProgress = nil
+            self?.pasteTask = nil
+        }
+    }
+
+    /// Stops a paste in progress. Characters already sent to the PiKVM
+    /// (up to one small chunk) are still typed.
+    func cancelPaste() {
+        pasteTask?.cancel()
     }
 
     /// Presses the keys in order, then releases them in reverse.
