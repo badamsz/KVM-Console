@@ -83,4 +83,33 @@ final class ConsoleTests: XCTestCase {
         var parser = MJPEGParser()
         XCTAssertEqual(parser.append(stream), [jpeg])
     }
+
+    func testPartAssemblerEmitsEachPartAsAFrame() {
+        let jpegA = Data([0xFF, 0xD8, 1, 2, 3, 0xFF, 0xD9])
+        let jpegB = Data([0xFF, 0xD8, 9, 0xFF, 0xD9])
+        var assembler = MJPEGPartAssembler()
+
+        // Known length: emitted as soon as the body is complete, even in pieces.
+        XCTAssertNil(assembler.beginPart(mimeType: "image/jpeg", expectedLength: Int64(jpegA.count)))
+        XCTAssertEqual(assembler.append(jpegA.prefix(3)), [])
+        XCTAssertEqual(assembler.append(jpegA.dropFirst(3)), [jpegA])
+
+        // Unknown length: emitted when the next part begins.
+        XCTAssertNil(assembler.beginPart(mimeType: "image/jpeg", expectedLength: -1))
+        XCTAssertEqual(assembler.append(jpegB), [])
+        XCTAssertEqual(assembler.beginPart(mimeType: "image/jpeg", expectedLength: -1), jpegB)
+
+        // Not a JPEG: dropped.
+        XCTAssertEqual(assembler.append(Data([1, 2, 3, 4])), [])
+        XCTAssertNil(assembler.beginPart(mimeType: "image/jpeg", expectedLength: -1))
+    }
+
+    func testPartAssemblerFallsBackToRawMultipart() {
+        let jpeg = Data([0xFF, 0xD8, 7, 0xFF, 0xD9])
+        var stream = Data("--b\r\nContent-Type: image/jpeg\r\nContent-Length: \(jpeg.count)\r\n\r\n".utf8)
+        stream.append(jpeg)
+        var assembler = MJPEGPartAssembler()
+        XCTAssertNil(assembler.beginPart(mimeType: "multipart/x-mixed-replace", expectedLength: -1))
+        XCTAssertEqual(assembler.append(stream), [jpeg])
+    }
 }

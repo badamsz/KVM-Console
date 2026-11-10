@@ -62,6 +62,45 @@ public struct MJPEGParser {
     }
 }
 
+/// Assembles JPEG frames from what `URLSession` delivers for an MJPEG stream.
+///
+/// `URLSession` understands `multipart/x-mixed-replace` itself: it calls the
+/// delegate's `didReceive response` once per part and hands over only each
+/// part's body, with the boundaries and part headers already removed. So
+/// each part is one JPEG. If a response arrives that is still the raw
+/// multipart stream, the bytes go through `MJPEGParser` instead.
+public struct MJPEGPartAssembler {
+    private var part = Data()
+    private var expectedLength = -1
+    private var raw = false
+    private var parser = MJPEGParser()
+
+    public init() {}
+
+    /// Call for every response. Returns the previous part if it is a
+    /// complete frame that wasn't emitted yet (parts without a length).
+    public mutating func beginPart(mimeType: String?, expectedLength: Int64) -> Data? {
+        let previous = takeFrame()
+        raw = (mimeType ?? "").lowercased().hasPrefix("multipart/")
+        self.expectedLength = expectedLength > 0 ? Int(clamping: expectedLength) : -1
+        return previous
+    }
+
+    public mutating func append(_ data: Data) -> [Data] {
+        if raw { return parser.append(data) }
+        part.append(data)
+        // With a known length the frame can be shown without waiting for the next part.
+        if expectedLength > 0, part.count >= expectedLength, let frame = takeFrame() { return [frame] }
+        return []
+    }
+
+    private mutating func takeFrame() -> Data? {
+        defer { part = Data() }
+        guard part.count > 2, part[part.startIndex] == 0xFF, part[part.startIndex + 1] == 0xD8 else { return nil }
+        return part
+    }
+}
+
 /// Reads the MJPEG stream from `/streamer/stream` and delivers JPEG frames.
 /// kvmd only runs the streamer while a session websocket opened with
 /// `stream=1` exists, so keep `KVMDClient.consoleSocket()` open alongside.
@@ -78,7 +117,7 @@ public final class MJPEGStreamer: NSObject, URLSessionDataDelegate, @unchecked S
     private let trust: CertificatePinningDelegate
     private let onFrame: FrameHandler
     private let onEnd: EndHandler
-    private var parser = MJPEGParser()
+    private var assembler = MJPEGPartAssembler()
     private var session: URLSession?
     private let queue: OperationQueue = {
         let q = OperationQueue()
@@ -122,11 +161,15 @@ public final class MJPEGStreamer: NSObject, URLSessionDataDelegate, @unchecked S
             onEnd(http.statusCode == 401 || http.statusCode == 403 ? KVMDError.unauthorized : KVMDError.http(http.statusCode))
             return
         }
+        // Called once per frame: URLSession splits multipart/x-mixed-replace itself.
+        if let frame = assembler.beginPart(mimeType: response.mimeType, expectedLength: response.expectedContentLength) {
+            onFrame(frame)
+        }
         completionHandler(.allow)
     }
 
     public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        for frame in parser.append(data) { onFrame(frame) }
+        for frame in assembler.append(data) { onFrame(frame) }
     }
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
