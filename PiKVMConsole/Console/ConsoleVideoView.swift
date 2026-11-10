@@ -145,16 +145,21 @@ final class ConsoleNSView: NSView {
     /// Releases held keys and buttons on the remote machine and frees the cursor,
     /// so nothing stays stuck down when the console loses focus.
     func releaseEverything() {
+        releaseKeys()
+        for button in pressedButtons { model.mouseButton(button, down: false) }
+        pressedButtons.removeAll()
+        if captured { setCaptured(false) }
+        showCursor()
+    }
+
+    /// Releases every key held on the remote machine, including modifiers.
+    func releaseKeys() {
         for code in pressedKeys { model.key(code, down: false) }
         pressedKeys.removeAll()
         for keyCode in pressedModifiers {
             if let code = KeyMap.webCode(forMacKeyCode: keyCode) { model.key(code, down: false) }
         }
         pressedModifiers.removeAll()
-        for button in pressedButtons { model.mouseButton(button, down: false) }
-        pressedButtons.removeAll()
-        if captured { setCaptured(false) }
-        showCursor()
     }
 
     // MARK: Cursor
@@ -345,6 +350,15 @@ final class ConsoleNSView: NSView {
         // Keep Ctrl+Cmd+F (full screen) for the Mac.
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags.contains([.command, .control]), event.keyCode == 3 { return false }
+        // Option+Cmd+V types the Mac clipboard on the remote machine.
+        if flags == [.command, .option], event.keyCode == 9 {
+            if !event.isARepeat {
+                // Let go of Option and Command on the remote first, or they'd modify the typed text.
+                releaseKeys()
+                model.pasteClipboard()
+            }
+            return true
+        }
         // AppKit doesn't deliver keyUp while Command is held, so tap the key.
         if let code = KeyMap.webCode(forMacKeyCode: event.keyCode), !event.isARepeat {
             model.key(code, down: true)

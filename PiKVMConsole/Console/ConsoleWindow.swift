@@ -39,6 +39,19 @@ private struct ConsoleContent: View {
             ConsoleVideoView(model: model, frame: model.frame, liveView: model.webRTCView, videoSize: model.videoSize,
                              mouseMode: model.mouseMode, captured: model.mouseCaptured)
             overlay
+            pasteStatus
+        }
+        .confirmationDialog(
+            "Type \(model.pendingPaste?.count ?? 0) characters on \(model.target?.name ?? "the remote machine")?",
+            isPresented: Binding(get: { model.pendingPaste != nil }, set: { if !$0 { model.pendingPaste = nil } }),
+            presenting: model.pendingPaste
+        ) { text in
+            Button("Type It") { model.typeText(text) }
+            Button("Cancel", role: .cancel) { model.pendingPaste = nil }
+        } message: { text in
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: false).count
+            let seconds = Int(TextPaste.estimatedDuration(characters: text.count, delay: model.typingRate.delay).rounded(.up))
+            Text("\(lines) line\(lines == 1 ? "" : "s"), about \(seconds) second\(seconds == 1 ? "" : "s") at \(model.typingRate.displayName) speed. Each line break is typed as Enter.")
         }
         // The video stays below the toolbar; only the black backdrop extends under it.
         .background(Color.black.ignoresSafeArea())
@@ -94,6 +107,14 @@ private struct ConsoleContent: View {
                     Button("Windows Key") { model.sendCombo(["MetaLeft"]) }
                     Button("Ctrl+Alt+F1") { model.sendCombo(["ControlLeft", "AltLeft", "F1"]) }
                     Button("Print Screen") { model.sendCombo(["PrintScreen"]) }
+                    Divider()
+                    Button("Paste Clipboard as Typing (⌥⌘V)") { model.pasteClipboard() }
+                        .disabled(model.pasteProgress != nil)
+                    Picker("Typing Speed", selection: Binding(get: { model.typingRate }, set: { model.typingRate = $0 })) {
+                        ForEach(TypingRate.allCases) { rate in
+                            Text("\(rate.displayName) (\(rate.detail))").tag(rate)
+                        }
+                    }
                 } label: {
                     Label("Send Keys", systemImage: "keyboard")
                 }
@@ -105,6 +126,25 @@ private struct ConsoleContent: View {
                     Label("Full Screen", systemImage: "arrow.up.left.and.arrow.down.right")
                 }
                 .help("Full screen (Ctrl+Cmd+F)")
+            }
+        }
+    }
+
+    @ViewBuilder private var pasteStatus: some View {
+        if let progress = model.pasteProgress {
+            VStack {
+                HStack(spacing: 10) {
+                    ProgressView(value: Double(progress.typed), total: Double(max(progress.total, 1)))
+                        .frame(width: 140)
+                    Text("Typing \(progress.typed) of \(progress.total)")
+                        .monospacedDigit()
+                    Button("Cancel") { model.cancelPaste() }
+                }
+                .font(.callout)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.top, 12)
+                Spacer()
             }
         }
     }

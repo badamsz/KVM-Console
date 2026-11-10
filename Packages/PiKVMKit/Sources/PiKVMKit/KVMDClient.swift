@@ -125,6 +125,24 @@ public final class KVMDClient: Sendable {
                            query: ["mouse_output": mode.kvmdMouseOutput])
     }
 
+    /// Types `text` on the remote machine as key presses. kvmd maps each
+    /// character through `keymap` (its default when nil), which must match
+    /// the remote machine's keyboard layout. Returns when typing is done.
+    /// - Parameter delay: pause after each key event, 0...5 seconds.
+    public func typeText(_ text: String, delay: TimeInterval = 0.02, keymap: String? = nil) async throws {
+        var query = ["limit": "0", "delay": String(format: "%.3f", max(0, min(5, delay)))]
+        // Older kvmd has no `delay`; `slow` is its 20 ms equivalent.
+        if delay >= 0.02 { query["slow"] = "1" }
+        if let keymap { query["keymap"] = keymap }
+        var req = try makeRequest("api/hid/print", method: "POST", query: query)
+        req.httpBody = Data(text.utf8)
+        req.setValue("text/plain; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        // The request stays open while kvmd types.
+        req.timeoutInterval = 30 + TextPaste.estimatedDuration(characters: text.count, delay: delay) * 2
+        let (data, response) = try await session.data(for: req)
+        _ = try Self.decode(Empty.self, data: data, response: response)
+    }
+
     /// The PiKVM Switch chain state. Throws if no switch is configured.
     public func switchState() async throws -> SwitchState {
         try await send(SwitchState.self, "api/switch")
