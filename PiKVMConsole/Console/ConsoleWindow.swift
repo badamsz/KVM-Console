@@ -80,6 +80,7 @@ private struct ConsoleContent: View {
             return "\(Int(size.width))×\(Int(size.height)) · \(model.fps) fps"
                 + (model.mouseCaptured ? " · Control+Option releases the mouse" : "")
         case .connecting: return "Connecting…"
+        case .noSignal: return "No signal"
         case .failed: return "Disconnected"
         }
     }
@@ -94,6 +95,13 @@ private struct ConsoleContent: View {
             VStack(spacing: 10) {
                 ProgressView().controlSize(.large)
                 Text("Connecting…")
+            }
+            .foregroundStyle(.white)
+        case .noSignal:
+            VStack(spacing: 10) {
+                Image(systemName: "display.trianglebadge.exclamationmark").font(.largeTitle)
+                Text("No video signal")
+                Text("The machine may be off or asleep. Keyboard and mouse still work.").font(.caption)
             }
             .foregroundStyle(.white)
         case .failed(let message):

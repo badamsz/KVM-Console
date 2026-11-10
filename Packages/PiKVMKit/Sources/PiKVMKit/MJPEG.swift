@@ -66,6 +66,11 @@ public struct MJPEGParser {
 /// kvmd only runs the streamer while a session websocket opened with
 /// `stream=1` exists, so keep `KVMDClient.consoleSocket()` open alongside.
 public final class MJPEGStreamer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    /// uStreamer sends no frames while the source has no signal, and may
+    /// send none while the picture is static, so a quiet stream is normal.
+    /// A dead connection is detected by the session websocket instead.
+    static let idleTimeout: TimeInterval = 7 * 24 * 3600
+
     public typealias FrameHandler = @Sendable (Data) -> Void
     public typealias EndHandler = @Sendable (Error?) -> Void
 
@@ -83,7 +88,7 @@ public final class MJPEGStreamer: NSObject, URLSessionDataDelegate, @unchecked S
 
     public init(client: KVMDClient, onFrame: @escaping FrameHandler, onEnd: @escaping EndHandler) throws {
         var req = try client.makeRequest("streamer/stream")
-        req.timeoutInterval = 15
+        req.timeoutInterval = Self.idleTimeout
         self.request = req
         self.trust = CertificatePinningDelegate(pinnedSHA256: client.effectivePinnedSHA256)
         self.onFrame = onFrame
@@ -93,7 +98,8 @@ public final class MJPEGStreamer: NSObject, URLSessionDataDelegate, @unchecked S
     public func start() {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil
-        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForRequest = Self.idleTimeout
+        config.timeoutIntervalForResource = Self.idleTimeout
         let session = URLSession(configuration: config, delegate: self, delegateQueue: queue)
         self.session = session
         session.dataTask(with: request).resume()

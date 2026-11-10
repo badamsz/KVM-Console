@@ -54,4 +54,13 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(event.eventType, "atx_state")
         XCTAssertEqual(event.event["leds"]?["power"], .bool(true))
     }
+
+    func testStreamerOnlineEvent() throws {
+        let decode = { (json: String) in try JSONDecoder().decode(KVMDEvent.self, from: Data(json.utf8)) }
+        XCTAssertEqual(try decode(#"{"event_type":"streamer","event":{"streamer":{"source":{"online":false,"resolution":{"width":1920,"height":1080}}}}}"#).streamerSourceOnline, false)
+        XCTAssertEqual(try decode(#"{"event_type":"streamer","event":{"streamer":{"source":{"online":true}}}}"#).streamerSourceOnline, true)
+        XCTAssertNil(try decode(#"{"event_type":"streamer","event":{"streamer":null}}"#).streamerSourceOnline)
+        XCTAssertNil(try decode(#"{"event_type":"streamer","event":{"features":{"h264":true}}}"#).streamerSourceOnline)
+        XCTAssertNil(try decode(#"{"event_type":"atx","event":{"streamer":{"source":{"online":true}}}}"#).streamerSourceOnline)
+    }
 }

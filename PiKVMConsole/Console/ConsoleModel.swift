@@ -12,6 +12,8 @@ final class ConsoleModel {
     enum State: Equatable {
         case connecting
         case live
+        /// Connected, but the remote machine is sending no video.
+        case noSignal
         case failed(String)
     }
 
@@ -113,31 +115,41 @@ final class ConsoleModel {
                 }
             }
 
-            let streamer = try MJPEGStreamer(client: client, onFrame: { [weak self] data in
-                guard let image = ConsoleModel.decode(data) else { return }
-                Task { @MainActor [weak self] in self?.receive(image, generation: gen) }
-            }, onEnd: { [weak self] error in
-                Task { @MainActor [weak self] in self?.streamEnded(error, generation: gen) }
-            })
-            self.streamer = streamer
             // kvmd starts the streamer once a stream=1 socket exists; give it a moment.
             try? await Task.sleep(nanoseconds: 500_000_000)
-            streamer.start()
+            startStream(client: client, generation: gen)
 
             // Drain the socket; it ends (throws) when the connection drops.
             while !Task.isCancelled {
-                _ = try await socket.receive()
-                if state == .live { wasLive = true }
+                let message = try await socket.receive()
+                if state == .live || state == .noSignal { wasLive = true }
+                if case .string(let text) = message,
+                   let event = try? JSONDecoder().decode(KVMDEvent.self, from: Data(text.utf8)),
+                   let online = event.streamerSourceOnline {
+                    sourceOnline(online)
+                }
             }
         } catch {
-            if !Task.isCancelled, state != .live || frame == nil {
+            if !Task.isCancelled, !wasLive {
                 state = .failed(error.localizedDescription)
             }
         }
-        if state == .live { wasLive = true }
+        if state == .live || state == .noSignal { wasLive = true }
         teardown()
         if !Task.isCancelled { state = .connecting }
         return wasLive
+    }
+
+    private func startStream(client: KVMDClient, generation gen: Int) {
+        guard gen == generation else { return }
+        streamer?.stop()
+        streamer = try? MJPEGStreamer(client: client, onFrame: { [weak self] data in
+            guard let image = ConsoleModel.decode(data) else { return }
+            Task { @MainActor [weak self] in self?.receive(image, generation: gen) }
+        }, onEnd: { [weak self] error in
+            Task { @MainActor [weak self] in self?.streamEnded(error, client: client, generation: gen) }
+        })
+        streamer?.start()
     }
 
     nonisolated private static func decode(_ jpeg: Data) -> CGImage? {
@@ -160,11 +172,32 @@ final class ConsoleModel {
         }
     }
 
-    private func streamEnded(_ error: Error?, generation gen: Int) {
+    /// kvmd reports whether the capture source has a signal. Without one
+    /// the streamer sends no frames at all.
+    private func sourceOnline(_ online: Bool) {
+        if !online {
+            frame = nil
+            fps = 0
+            state = .noSignal
+        } else if state == .noSignal {
+            state = frame == nil ? .connecting : .live
+        }
+    }
+
+    /// The video stream closed while the session socket is still up, e.g.
+    /// the streamer wasn't ready yet or restarted for a new video mode.
+    /// Retry the stream alone; a lost connection is handled by the socket.
+    private func streamEnded(_ error: Error?, client: KVMDClient, generation gen: Int) {
         guard gen == generation else { return }
-        // Dropping the socket makes runOnce return and reconnect.
-        socket?.cancel(with: .goingAway, reason: nil)
-        if let error, frame == nil { state = .failed(error.localizedDescription) }
+        if let kvmdError = error as? KVMDError, case .unauthorized = kvmdError {
+            state = .failed(KVMDError.unauthorized.localizedDescription)
+            socket?.cancel(with: .goingAway, reason: nil)
+            return
+        }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            self?.startStream(client: client, generation: gen)
+        }
     }
 
     // MARK: Input
