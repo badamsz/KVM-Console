@@ -36,7 +36,8 @@ private struct ConsoleContent: View {
 
     var body: some View {
         ZStack {
-            ConsoleVideoView(model: model, frame: model.frame, mouseMode: model.mouseMode, captured: model.mouseCaptured)
+            ConsoleVideoView(model: model, frame: model.frame, liveView: model.webRTCView, videoSize: model.videoSize,
+                             mouseMode: model.mouseMode, captured: model.mouseCaptured)
             overlay
         }
         // The video stays below the toolbar; only the black backdrop extends under it.
@@ -50,6 +51,41 @@ private struct ConsoleContent: View {
                 }
                 .pickerStyle(.segmented)
                 .help("Mouse mode for this machine")
+
+                Menu {
+                    Picker("Video", selection: Binding(get: { model.videoMode }, set: { model.setVideoMode($0) })) {
+                        ForEach(VideoMode.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    if let reason = model.fallbackReason {
+                        Text("Using MJPEG: \(reason)")
+                    }
+                } label: {
+                    Label("Video", systemImage: "play.rectangle")
+                }
+                .help("Video mode")
+
+                if model.audioAvailable {
+                    Menu {
+                        Toggle("Mute", isOn: Binding(get: { model.muted }, set: { model.muted = $0 }))
+                        Divider()
+                        ForEach([100, 75, 50, 25], id: \.self) { percent in
+                            Button {
+                                model.volume = Double(percent) / 100
+                                model.muted = false
+                            } label: {
+                                if Int((model.volume * 100).rounded()) == percent, !model.muted {
+                                    Label("\(percent)%", systemImage: "checkmark")
+                                } else {
+                                    Text("\(percent)%")
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Audio", systemImage: model.muted ? "speaker.slash" : "speaker.wave.2")
+                    }
+                    .help("Remote audio")
+                }
 
                 Menu {
                     Button("Ctrl+Alt+Del") { model.sendCombo(["ControlLeft", "AltLeft", "Delete"]) }
@@ -77,7 +113,8 @@ private struct ConsoleContent: View {
         switch model.state {
         case .live:
             let size = model.videoSize
-            return "\(Int(size.width))×\(Int(size.height)) · \(model.fps) fps"
+            let mode = model.activeVideoMode == .h264 ? "H.264" : "MJPEG · \(model.fps) fps"
+            return "\(Int(size.width))×\(Int(size.height)) · \(mode)"
                 + (model.mouseCaptured ? " · Control+Option releases the mouse" : "")
         case .connecting: return "Connecting…"
         case .noSignal: return "No signal"

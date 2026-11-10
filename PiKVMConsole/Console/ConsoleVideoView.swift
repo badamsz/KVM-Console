@@ -9,6 +9,9 @@ struct ConsoleVideoView: NSViewRepresentable {
     // Passed in (rather than read from the model here) so SwiftUI updates
     // this view whenever they change.
     let frame: CGImage?
+    /// The view WebRTC renders into while H.264 is active; nil for MJPEG.
+    let liveView: NSView?
+    let videoSize: CGSize
     let mouseMode: MouseMode
     let captured: Bool
 
@@ -18,6 +21,7 @@ struct ConsoleVideoView: NSViewRepresentable {
 
     func updateNSView(_ view: ConsoleNSView, context: Context) {
         view.display(frame: frame)
+        view.setLiveView(liveView, videoSize: videoSize)
         view.apply(mouseMode: mouseMode, captured: captured)
     }
 
@@ -77,6 +81,27 @@ final class ConsoleNSView: NSView {
     override func layout() {
         super.layout()
         videoLayer.frame = bounds
+        liveView?.frame = videoRect()
+    }
+
+    /// All input is handled here, never by the video subview.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) == nil ? nil : self
+    }
+
+    private var liveView: NSView?
+
+    /// Shows (or removes) the WebRTC video view, fitted to the video's aspect ratio.
+    func setLiveView(_ view: NSView?, videoSize: CGSize) {
+        if view !== liveView {
+            liveView?.removeFromSuperview()
+            liveView = view
+            if let view {
+                view.autoresizingMask = []
+                addSubview(view)
+            }
+        }
+        liveView?.frame = videoRect()
     }
 
     // MARK: State from SwiftUI
