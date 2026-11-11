@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 import Observation
 import PiKVMKit
@@ -8,7 +9,8 @@ import PiKVMKit
 /// Sipeed NanoKVM), and applies the selected target's saved settings.
 ///
 /// A PiKVM is driven through `client` (kvmd); a Sipeed device through
-/// `nanoClient`. Exactly one of them is set while connected.
+/// `nanoClient`; an Openterface plugged into this Mac is `localUnit`.
+/// Exactly one of them is set while connected.
 @MainActor
 @Observable
 final class DeviceSession {
@@ -54,6 +56,7 @@ final class DeviceSession {
     private var connection: Connection?
     private var nanoConnection: NanoKVMConnection?
     private var eventTask: Task<Void, Never>?
+    private var usbWatch: Task<Void, Never>?
     private var uploadTask: Task<Void, Never>?
 
     init(deviceID: UUID, model: AppModel) {
@@ -65,8 +68,10 @@ final class DeviceSession {
     var client: KVMDClient? { connection?.client }
     /// The NanoKVM client, while connected to a Sipeed device.
     var nanoClient: NanoKVMClient? { nanoConnection?.client }
-    /// Connected to either kind of device.
-    var isConnected: Bool { client != nil || nanoClient != nil }
+    /// The Openterface this device stands for, while it is plugged in.
+    private(set) var localUnit: OpenterfaceUnit?
+    /// Connected to any kind of device.
+    var isConnected: Bool { client != nil || nanoClient != nil || localUnit != nil }
     /// The NanoKVM application version, while connected to a Sipeed device.
     private(set) var nanoInfo: NanoKVMInfo?
 
@@ -91,6 +96,10 @@ final class DeviceSession {
 
     func connect() async {
         guard let model, let device = model.device(deviceID) else { return }
+        if device.family.isLocal {
+            connectLocal(device)
+            return
+        }
         guard let password = model.credentials.password(for: deviceID) else {
             status = .failed("No password saved for this device. Edit the device to add one.")
             return
@@ -114,6 +123,46 @@ final class DeviceSession {
             startEvents()
         } catch {
             status = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Looks for the Openterface among the USB devices plugged in. The
+    /// console opens its video and serial port itself.
+    private func connectLocal(_ device: Device) {
+        watchUSB()
+        guard let unit = OpenterfaceScanner.unit(for: device) else {
+            localUnit = nil
+            status = .failed("No Openterface is plugged into this Mac. Connect its USB-C host cable to this Mac.")
+            return
+        }
+        localUnit = unit
+        status = .connected(endpointLabel: "USB", host: unit.displayName)
+        if device.localDeviceID == nil {
+            // Remember which one, in case another is plugged in later.
+            model?.update(deviceID) { $0.localDeviceID = unit.id }
+        }
+    }
+
+    /// Notices an Openterface being plugged in or unplugged.
+    private func watchUSB() {
+        guard usbWatch == nil else { return }
+        usbWatch = Task { [weak self] in
+            await withTaskGroup(of: Void.self) { group in
+                for name in [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification] {
+                    group.addTask { @MainActor [weak self] in
+                        for await _ in NotificationCenter.default.notifications(named: name) {
+                            // Give the serial port and audio a moment to appear too.
+                            try? await Task.sleep(nanoseconds: 1_000_000_000)
+                            guard let self, let device = self.model?.device(self.deviceID) else { return }
+                            switch self.status {
+                            case .connecting: continue
+                            case .idle where self.localUnit == nil: continue
+                            default: self.connectLocal(device)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -145,6 +194,9 @@ final class DeviceSession {
         connection = nil
         nanoConnection = nil
         nanoInfo = nil
+        localUnit = nil
+        usbWatch?.cancel()
+        usbWatch = nil
         downloadWatch?.cancel()
         downloadWatch = nil
         download = nil
@@ -152,6 +204,7 @@ final class DeviceSession {
     }
 
     func refreshAll() async {
+        if localUnit != nil { return }
         if nanoClient != nil {
             await refreshNanoATX()
             await refreshMSD()
@@ -353,6 +406,11 @@ final class DeviceSession {
         previewsLoading.insert(target.id)
         defer { previewsLoading.remove(target.id) }
         do {
+            if let localUnit {
+                let image = try await OpenterfaceCapture.snapshot(videoID: localUnit.id)
+                previews[target.id] = ScreenPreview(image: image, date: Date(), error: nil)
+                return
+            }
             let data: Data
             if let nanoClient {
                 data = try await nanoClient.snapshot()

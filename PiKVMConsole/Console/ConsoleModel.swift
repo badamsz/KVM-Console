@@ -96,10 +96,10 @@ final class ConsoleModel {
     private(set) var sendingMic = false
     private(set) var sendingCamera = false
     var volume = ConsolePreferences.volume {
-        didSet { ConsolePreferences.volume = volume; webRTC?.volume = volume }
+        didSet { ConsolePreferences.volume = volume; webRTC?.volume = volume; local?.capture.volume = muted ? 0 : Float(volume) }
     }
     var muted = ConsolePreferences.muted {
-        didSet { ConsolePreferences.muted = muted; webRTC?.muted = muted }
+        didSet { ConsolePreferences.muted = muted; webRTC?.muted = muted; local?.capture.volume = muted ? 0 : Float(volume) }
     }
 
     struct PasteProgress: Equatable {
@@ -133,6 +133,8 @@ final class ConsoleModel {
     /// Set while connected to a Sipeed NanoKVM, which takes standard HID
     /// reports instead of kvmd's key names. See `ConsoleModel+NanoKVM.swift`.
     var nano: NanoKVMConsoleLink?
+    /// Set while showing an Openterface plugged into this Mac. See `ConsoleModel+Openterface.swift`.
+    var local: OpenterfaceConsoleLink?
 
     init(selection: TargetSelection, app: AppModel) {
         self.selection = selection
@@ -144,7 +146,7 @@ final class ConsoleModel {
 
     /// Whether the user can pick between H.264 and MJPEG. Sipeed devices
     /// offer only one: MJPEG on the NanoKVM and Pro, H.264 on the Go.
-    var canChooseVideoMode: Bool { !(device?.family.isSipeed ?? false) }
+    var canChooseVideoMode: Bool { (device?.family ?? .pikvm) == .pikvm }
     var mouseMode: MouseMode { target?.mouseMode ?? .absolute }
 
     // MARK: Lifecycle
@@ -174,6 +176,8 @@ final class ConsoleModel {
         generation += 1
         nano?.stop()
         nano = nil
+        local?.stop()
+        local = nil
         pingTask?.cancel()
         pingTask = nil
         streamer?.stop()
@@ -203,6 +207,7 @@ final class ConsoleModel {
     func reconnect() {
         h264Unavailable = false
         fallbackReason = nil
+        local?.finish(nil)
         socket?.cancel(with: .goingAway, reason: nil)
     }
 
@@ -249,6 +254,9 @@ final class ConsoleModel {
         await session.connectIfNeeded()
         if let nanoClient = session.nanoClient {
             return await runNanoKVMOnce(nanoClient)
+        }
+        if let unit = session.localUnit {
+            return await runOpenterfaceOnce(unit)
         }
         guard let client = session.client else {
             if case .failed(let message) = session.status { state = .failed(message) }
@@ -393,6 +401,17 @@ final class ConsoleModel {
         return CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
     }
 
+    /// Shows video drawn by a view of its own (an Openterface's capture preview).
+    func showLocalVideo(_ view: NSView, size: CGSize, fps: Int, codec: String, audio: Bool) {
+        activeVideoMode = .mjpeg
+        frameCodec = codec
+        frame = nil
+        webRTCView = view
+        videoSize = size
+        self.fps = fps
+        audioAvailable = audio
+    }
+
     func receive(_ image: CGImage, generation gen: Int) {
         guard gen == generation else { return }
         frame = image
@@ -450,17 +469,20 @@ final class ConsoleModel {
 
     func key(_ code: String, down: Bool) {
         if let nano { nano.key(code, down: down); return }
+        if let local { local.key(code, down: down); return }
         send(HIDMessage.key(code, down: down))
     }
 
     func mouseButton(_ button: MouseButton, down: Bool) {
         if let nano { nano.mouseButton(button, down: down, mode: mouseMode); return }
+        if let local { local.mouseButton(button, down: down, mode: mouseMode); return }
         send(HIDMessage.mouseButton(button, down: down))
     }
 
     /// `point` is in video pixels with the origin at the top-left.
     func mouseMove(toVideoPoint point: CGPoint) {
         if let nano { nano.mouseMove(toVideoPoint: point, videoSize: videoSize); return }
+        if let local { local.mouseMove(toVideoPoint: point, videoSize: videoSize); return }
         guard let pos = HIDMessage.absolutePosition(x: point.x, y: point.y,
                                                     videoWidth: videoSize.width, videoHeight: videoSize.height) else { return }
         send(HIDMessage.mouseMove(x: pos.x, y: pos.y))
@@ -468,6 +490,7 @@ final class ConsoleModel {
 
     func mouseRelative(dx: Int, dy: Int) {
         if let nano { nano.mouseRelative(dx: dx, dy: dy); return }
+        if let local { local.mouseRelative(dx: dx, dy: dy); return }
         let steps = HIDMessage.splitDelta(dx: dx, dy: dy)
         guard !steps.isEmpty else { return }
         send(HIDMessage.mouseRelative(steps, squash: steps.count > 1))
@@ -476,6 +499,7 @@ final class ConsoleModel {
     func mouseWheel(dx: Int, dy: Int) {
         guard dx != 0 || dy != 0 else { return }
         if let nano { nano.mouseWheel(dy: dy, mode: mouseMode); return }
+        if let local { local.mouseWheel(dy: dy, mode: mouseMode); return }
         send(HIDMessage.mouseWheel(dx: dx, dy: dy))
     }
 
@@ -504,6 +528,10 @@ final class ConsoleModel {
     /// Types `text` on the remote machine at the chosen typing rate.
     func typeText(_ text: String) {
         pendingPaste = nil
+        if let local {
+            typeTextOnOpenterface(text, link: local)
+            return
+        }
         if let app, let nanoClient = app.session(for: selection.deviceID).nanoClient {
             typeTextOnNanoKVM(text, client: nanoClient)
             return

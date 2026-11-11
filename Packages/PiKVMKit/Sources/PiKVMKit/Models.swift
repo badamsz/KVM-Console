@@ -8,8 +8,14 @@ public enum DeviceFamily: String, Codable, CaseIterable, Sendable {
     case nanoKVM
     /// Sipeed NanoKVM Pro and NanoKVM Go: the NanoKVM Pro server, HTTPS by default.
     case nanoKVMPro
+    /// Openterface: a USB KVM plugged into this Mac. Video and audio arrive as
+    /// a USB camera and microphone; keyboard and mouse go out over USB serial.
+    case openterface
 
-    public var isSipeed: Bool { self != .pikvm }
+    public var isSipeed: Bool { self == .nanoKVM || self == .nanoKVMPro }
+
+    /// Plugged into this Mac rather than reached over the network.
+    public var isLocal: Bool { self == .openterface }
 }
 
 /// The device's hardware model. It picks the API (`family`) and is used for
@@ -26,6 +32,8 @@ public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
     case nanoKVMPro
     /// Sipeed NanoKVM Go.
     case nanoKVMGo
+    /// Openterface Mini-KVM or KVM-Go, plugged into this Mac by USB.
+    case openterface
 
     public var id: String { rawValue }
 
@@ -38,6 +46,7 @@ public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
         case .nanoKVM: return "Sipeed NanoKVM"
         case .nanoKVMPro: return "Sipeed NanoKVM Pro"
         case .nanoKVMGo: return "Sipeed NanoKVM Go"
+        case .openterface: return "Openterface (USB)"
         }
     }
 
@@ -46,6 +55,7 @@ public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
         case .v3, .v4Mini, .v4Plus, .other: return .pikvm
         case .nanoKVM: return .nanoKVM
         case .nanoKVMPro, .nanoKVMGo: return .nanoKVMPro
+        case .openterface: return .openterface
         }
     }
 
@@ -55,6 +65,7 @@ public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
         case .pikvm: return "PiKVM"
         case .nanoKVM: return "NanoKVM"
         case .nanoKVMPro: return self == .nanoKVMGo ? "NanoKVM Go" : "NanoKVM Pro"
+        case .openterface: return "Openterface"
         }
     }
 
@@ -174,6 +185,9 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
     /// How the certificate is checked. Nil until the first successful
     /// connection decides it.
     public var certificateTrust: CertificateTrust?
+    /// For a device plugged into this Mac (Openterface): which one, by the
+    /// unique ID of its video capture device. Nil uses the first one found.
+    public var localDeviceID: String?
 
     public init(
         id: UUID = UUID(),
@@ -183,7 +197,8 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         username: String = "admin",
         targets: [Target]? = nil,
         pinnedCertificateSHA256: String? = nil,
-        certificateTrust: CertificateTrust? = nil
+        certificateTrust: CertificateTrust? = nil,
+        localDeviceID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -193,6 +208,7 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         self.targets = targets ?? [Target(name: name)]
         self.pinnedCertificateSHA256 = pinnedCertificateSHA256
         self.certificateTrust = certificateTrust
+        self.localDeviceID = localDeviceID
     }
 
     /// Records what the first successful connection saw: a CA-issued

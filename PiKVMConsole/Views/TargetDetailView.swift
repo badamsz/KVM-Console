@@ -26,6 +26,17 @@ struct TargetDetailView: View {
                 if let v = session.nanoInfo?.application, !v.isEmpty { LabeledContent("NanoKVM software", value: v) }
                 if let h = session.nanoInfo?.mdns, !h.isEmpty { LabeledContent("Hostname", value: h) }
                 if let h = session.info?.hostname { LabeledContent("Hostname", value: h) }
+                if let unit = session.localUnit {
+                    LabeledContent("Video", value: unit.videoChip.map { "\(unit.videoName) (\($0))" } ?? unit.videoName)
+                    LabeledContent("Keyboard and mouse") {
+                        if let path = unit.serialPath {
+                            Text(unit.controlChip.map { "\($0) on \(path)" } ?? path)
+                        } else {
+                            Text("Controller not found").foregroundStyle(.red)
+                        }
+                    }
+                    LabeledContent("Audio", value: unit.audioName ?? "Not found")
+                }
                 switch device.certificateTrust {
                 case .certificateAuthority:
                     LabeledContent("Certificate", value: "Issued by a certificate authority this Mac trusts")

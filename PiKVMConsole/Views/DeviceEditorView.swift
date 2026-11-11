@@ -16,6 +16,9 @@ struct DeviceEditorView: View {
 
     private var isNew: Bool { if case .edit = request { return false } else { return true } }
     private var isSipeed: Bool { device.family.isSipeed }
+    private var isLocal: Bool { device.family.isLocal }
+    /// Openterface units plugged into this Mac, for the picker.
+    @State private var units: [OpenterfaceUnit] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,30 +32,15 @@ struct DeviceEditorView: View {
                         Section("Sipeed") {
                             ForEach(PiKVMModel.allCases.filter { $0.family.isSipeed }) { Text($0.displayName).tag($0) }
                         }
+                        Section("Plugged into this Mac") {
+                            ForEach(PiKVMModel.allCases.filter { $0.family.isLocal }) { Text($0.displayName).tag($0) }
+                        }
                     }
                 }
-                Section {
-                    TextField("LAN address", text: $lanHost, prompt: Text(isSipeed ? "192.168.1.60 or nanokvm.local" : "192.168.1.50 or pikvm.local"))
-                    TextField("Tailscale address", text: $tailscaleHost, prompt: Text(isSipeed ? "nanokvm.tailnet-name.ts.net" : "pikvm.tailnet-name.ts.net"))
-                } header: {
-                    Text("Addresses")
-                } footer: {
-                    Text(isSipeed
-                         ? "The LAN address is tried first, then Tailscale. HTTPS is tried before plain HTTP, which a NanoKVM uses unless HTTPS is turned on in its settings."
-                         : "The LAN address is tried first, then Tailscale.")
-                        .foregroundStyle(.secondary)
-                }
-                Section {
-                    TextField("Username", text: $device.username)
-                    SecureField("Password", text: $password,
-                                prompt: Text(hasSavedPassword ? "Saved in Keychain" : "Required"))
-                } header: {
-                    Text("Login")
-                } footer: {
-                    Text(isSipeed
-                         ? "The NanoKVM web login. The default is admin / admin until you change it."
-                         : "If two-factor authentication is on, add the current code to the end of the password.")
-                        .foregroundStyle(.secondary)
+                if isLocal {
+                    localSection
+                } else {
+                    networkSections
                 }
                 if let testResult {
                     Text(testResult).font(.callout).foregroundStyle(.secondary)
@@ -62,13 +50,13 @@ struct DeviceEditorView: View {
 
             HStack {
                 Button("Test Connection") { Task { await test() } }
-                    .disabled(testing || assembled().endpoints.isEmpty)
+                    .disabled(testing || (!isLocal && assembled().endpoints.isEmpty))
                 if testing { ProgressView().controlSize(.small) }
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Add" : "Save") {
-                    model.save(assembled(), password: password)
+                    model.save(assembled(), password: isLocal ? nil : password)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -78,11 +66,60 @@ struct DeviceEditorView: View {
         }
         .frame(width: 460)
         .onAppear(perform: load)
+        .task(id: isLocal) { if isLocal { units = OpenterfaceScanner.scan() } }
+    }
+
+    @ViewBuilder private var localSection: some View {
+        Section {
+            Picker("Unit", selection: $device.localDeviceID) {
+                Text(units.isEmpty ? "None plugged in" : "The one plugged in").tag(String?.none)
+                ForEach(units) { unit in
+                    Text("\(unit.displayName) · \(unit.videoName)").tag(Optional(unit.id))
+                }
+                // Keep a saved unit selectable while it's unplugged.
+                if let id = device.localDeviceID, !units.contains(where: { $0.id == id }) {
+                    Text("Saved unit (not plugged in)").tag(Optional(id))
+                }
+            }
+            Button("Look Again") { units = OpenterfaceScanner.scan() }
+        } header: {
+            Text("USB")
+        } footer: {
+            Text("Connect the Openterface's host cable to this Mac and its target cable and HDMI to the machine you want to control. Video and audio come in as a camera and microphone, so macOS asks for access the first time.")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var networkSections: some View {
+        Section {
+            TextField("LAN address", text: $lanHost, prompt: Text(isSipeed ? "192.168.1.60 or nanokvm.local" : "192.168.1.50 or pikvm.local"))
+            TextField("Tailscale address", text: $tailscaleHost, prompt: Text(isSipeed ? "nanokvm.tailnet-name.ts.net" : "pikvm.tailnet-name.ts.net"))
+        } header: {
+            Text("Addresses")
+        } footer: {
+            Text(isSipeed
+                 ? "The LAN address is tried first, then Tailscale. HTTPS is tried before plain HTTP, which a NanoKVM uses unless HTTPS is turned on in its settings."
+                 : "The LAN address is tried first, then Tailscale.")
+                .foregroundStyle(.secondary)
+        }
+        Section {
+            TextField("Username", text: $device.username)
+            SecureField("Password", text: $password,
+                        prompt: Text(hasSavedPassword ? "Saved in Keychain" : "Required"))
+        } header: {
+            Text("Login")
+        } footer: {
+            Text(isSipeed
+                 ? "The NanoKVM web login. The default is admin / admin until you change it."
+                 : "If two-factor authentication is on, add the current code to the end of the password.")
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var canSave: Bool {
-        !device.name.trimmingCharacters(in: .whitespaces).isEmpty
-            && !assembled().endpoints.isEmpty
+        guard !device.name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        if isLocal { return true }
+        return !assembled().endpoints.isEmpty
             && (hasSavedPassword || !password.isEmpty)
     }
 
@@ -115,7 +152,8 @@ struct DeviceEditorView: View {
             endpoints.append(device.endpoints.first { $0.label == "Tailscale" }.map { Endpoint(id: $0.id, label: "Tailscale", host: ts) }
                 ?? Endpoint(label: "Tailscale", host: ts))
         }
-        d.endpoints = endpoints
+        d.endpoints = d.family.isLocal ? [] : endpoints
+        if !d.family.isLocal { d.localDeviceID = nil }
         // Setting the name above also renames a single machine (`Device.name`).
         return d
     }
@@ -126,6 +164,18 @@ struct DeviceEditorView: View {
         let pw = password.isEmpty ? (model.credentials.password(for: device.id) ?? "") : password
         var probe = assembled()
         probe.resetCertificateTrust()
+        if probe.family.isLocal {
+            units = OpenterfaceScanner.scan()
+            if let unit = OpenterfaceScanner.unit(for: probe) {
+                var parts = ["Found \(unit.displayName)"]
+                parts.append(unit.serialPath == nil ? "but not its keyboard and mouse controller" : "with keyboard and mouse")
+                parts.append(unit.audioID == nil ? "and no audio" : "and audio")
+                testResult = parts.joined(separator: " ") + "."
+            } else {
+                testResult = "No Openterface is plugged into this Mac."
+            }
+            return
+        }
         do {
             if probe.family.isSipeed {
                 let conn = try await NanoKVMConnectionResolver.connect(to: probe, password: pw)

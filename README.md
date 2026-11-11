@@ -1,6 +1,6 @@
 # PiKVM Console
 
-A native macOS app (macOS 14+) for remote control and management of [PiKVM](https://docs.pikvm.org) devices, and of [Sipeed NanoKVM](https://wiki.sipeed.com/hardware/en/kvm/) devices (NanoKVM, NanoKVM Pro, NanoKVM Go).
+A native macOS app (macOS 14+) for remote control and management of [PiKVM](https://docs.pikvm.org) devices, of [Sipeed NanoKVM](https://wiki.sipeed.com/hardware/en/kvm/) devices (NanoKVM, NanoKVM Pro, NanoKVM Go), and of [Openterface](https://openterface.com) USB KVMs plugged into the Mac.
 
 ## Status
 
@@ -10,6 +10,16 @@ All four planned steps are in. Nothing has been through a wide range of hardware
 2. **Console**: H.264 video and audio (WebRTC), MJPEG fallback, keyboard and mouse (absolute and relative), full screen. ✅
 3. **Management**: ISO upload and mounting ✅, ATX power ✅, switch port control ✅.
 4. **Polish**: menu bar quick view, screen previews, shortcuts, release build script. ✅
+
+## Openterface
+
+An Openterface Mini-KVM (or another unit with an MS2109/MS2130 capture chip and a CH9329 or CH32V208 controller) plugged into the Mac shows up under **Find Devices > Plugged into this Mac**, or add it with **Add Device** and the *Openterface (USB)* model. The app finds its parts by USB vendor and product ID:
+
+- **Video and audio** come from the unit's USB camera and microphone through AVFoundation. macOS asks for camera and microphone access the first time.
+- **Keyboard and mouse** go out as CH9329 serial commands (absolute and relative mouse, per machine like the other devices). The controller is tried at 115200 baud, then 9600.
+- Pasting types the text as key presses with a US keyboard layout.
+
+The serial protocol is implemented from WCH's published CH9329 command set rather than from Openterface's own app, which is AGPL-licensed. Quit the Openterface app first; only one app can hold the serial port.
 
 ## Building
 
