@@ -14,9 +14,13 @@ import Foundation
 //   Pro and Go take it plain.
 // * Responses are `{code, msg, data}` with HTTP 200; `code` 0 is success.
 // * Video: MJPEG at `/api/stream/mjpeg` (no separate session socket needed).
-//   H.264 is WebRTC with its own signalling, not Janus; not supported here yet.
+//   Newer firmware (NanoKVM Go) has no MJPEG; it streams H.264 frames over
+//   the `/api/stream/h264/direct` websocket (`H264DirectStreamer`). Its
+//   WebRTC signalling is its own, not Janus; not supported here yet.
 // * HID: binary messages on `/api/ws`, a type byte followed by a standard USB
-//   HID report (`HIDReport`), since NanoKVM 2.3.2. kvmd uses key names.
+//   HID report (`HIDReport`), since NanoKVM 2.3.2. The H.264-only firmware's
+//   web page wraps reports in input router messages (`NanoKVMInputRouter`).
+//   kvmd uses key names.
 // * Power: GPIO "button presses" (`/api/vm/gpio`) and the power/HDD LEDs.
 // * Virtual media: images already on the device (`/api/storage/image`),
 //   mounted as a CD-ROM or a USB disk.
@@ -322,6 +326,46 @@ public final class NanoKVMClient: @unchecked Sendable {
 
     // MARK: Video and input
 
+    /// How the device streams video, and with it which input messages it takes.
+    public enum VideoTransport: Sendable, Equatable {
+        /// `/api/stream/mjpeg`, with type-byte HID messages (`NanoKVMMessage`).
+        case mjpeg
+        /// `/api/stream/h264/direct` only, with input router messages
+        /// (`NanoKVMInputRouter`). Newer firmware such as the NanoKVM Go's.
+        case h264Direct
+    }
+
+    private var _transport: VideoTransport?
+
+    private var cachedTransport: VideoTransport? {
+        get { lock.lock(); defer { lock.unlock() }; return _transport }
+        set { lock.lock(); _transport = newValue; lock.unlock() }
+    }
+
+    /// Finds out whether the device has an MJPEG stream; newer firmware
+    /// answers 404. Asked once per client.
+    public func videoTransport() async throws -> VideoTransport {
+        if let cached = cachedTransport { return cached }
+        guard family == .nanoKVMPro else { return .mjpeg }
+        var result: VideoTransport = .mjpeg
+        for attempt in 0..<2 {
+            let (bytes, response) = try await session.bytes(for: try mjpegRequest())
+            bytes.task.cancel()
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 200
+            if status == 401, attempt == 0 { try await login(); continue }
+            if status == 401 || status == 403 { throw KVMDError.unauthorized }
+            result = status == 404 ? .h264Direct : .mjpeg
+            break
+        }
+        cachedTransport = result
+        return result
+    }
+
+    /// The direct H.264 stream socket. See `H264DirectStreamer`.
+    public func h264DirectSocket() throws -> URLSessionWebSocketTask {
+        try webSocket("api/stream/h264/direct")
+    }
+
     /// The MJPEG stream request, for `MJPEGStreamer(request:trust:...)`.
     public func mjpegRequest() throws -> URLRequest {
         var req = try makeRequest("api/stream/mjpeg")
@@ -332,17 +376,28 @@ public final class NanoKVMClient: @unchecked Sendable {
     /// The HID websocket. Send `NanoKVMMessage`s on it; send a heartbeat at
     /// least every 30 seconds.
     public func hidSocket() throws -> URLSessionWebSocketTask {
-        var req = try makeRequest("api/ws")
+        try webSocket("api/ws")
+    }
+
+    private func webSocket(_ path: String) throws -> URLSessionWebSocketTask {
+        var req = try makeRequest(path)
         guard var comps = URLComponents(url: req.url!, resolvingAgainstBaseURL: false) else { throw KVMDError.invalidURL }
         comps.scheme = (comps.scheme == "http") ? "ws" : "wss"
         req.url = comps.url
         req.timeoutInterval = 15
-        return session.webSocketTask(with: req)
+        let task = session.webSocketTask(with: req)
+        // A keyframe can be well over the 1 MB default.
+        task.maximumMessageSize = 32 * 1024 * 1024
+        return task
     }
 
     /// One frame of the video, as JPEG. NanoKVM has no snapshot API, so this
-    /// reads the MJPEG stream until a frame arrives.
+    /// reads the video stream until a frame arrives.
     public func snapshot(timeout: TimeInterval = 8) async throws -> Data {
+        if try await videoTransport() == .h264Direct {
+            // Pictures start at the next keyframe, which can be seconds away.
+            return try await h264Snapshot(timeout: max(timeout, 15))
+        }
         let request = try mjpegRequest()
         let trust = effectiveTrustPolicy
         let box = SnapshotBox()
@@ -364,6 +419,36 @@ public final class NanoKVMClient: @unchecked Sendable {
             box.finish(.failure(CancellationError()))
         }
     }
+
+    private func h264Snapshot(timeout: TimeInterval) async throws -> Data {
+        let box = SnapshotBox()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                box.begin(continuation)
+                do {
+                    let streamer = try H264DirectStreamer(client: self, onFrame: { image in
+                        if let jpeg = JPEG.data(from: image) { box.finish(.success(jpeg)) }
+                    }, onStatus: { status in
+                        if status == .noImage {
+                            box.finish(.failure(KVMDError.api("The NanoKVM has no picture. Is the remote machine's screen on?")))
+                        }
+                    }, onEnd: { error in
+                        box.finish(.failure(error ?? KVMDError.api("The NanoKVM's video stream ended before a picture arrived.")))
+                    })
+                    box.h264 = streamer
+                    streamer.start()
+                } catch {
+                    box.finish(.failure(error))
+                    return
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
+                    box.finish(.failure(KVMDError.api("The NanoKVM sent no picture. Is the remote machine's screen on?")))
+                }
+            }
+        } onCancel: {
+            box.finish(.failure(CancellationError()))
+        }
+    }
 }
 
 /// Resolves `snapshot()` exactly once and stops its stream.
@@ -371,6 +456,11 @@ private final class SnapshotBox: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, Error>?
     private var done = false
+    var h264: H264DirectStreamer? {
+        get { lock.lock(); defer { lock.unlock() }; return _h264 }
+        set { lock.lock(); _h264 = newValue; let stop = done; lock.unlock(); if stop { newValue?.stop() } }
+    }
+    private var _h264: H264DirectStreamer?
     var streamer: MJPEGStreamer? {
         get { lock.lock(); defer { lock.unlock() }; return _streamer }
         set { lock.lock(); _streamer = newValue; let stop = done; lock.unlock(); if stop { newValue?.stop() } }
@@ -392,8 +482,11 @@ private final class SnapshotBox: @unchecked Sendable {
         continuation = nil
         let s = _streamer
         _streamer = nil
+        let h = _h264
+        _h264 = nil
         lock.unlock()
         s?.stop()
+        h?.stop()
         c?.resume(with: result)
     }
 }

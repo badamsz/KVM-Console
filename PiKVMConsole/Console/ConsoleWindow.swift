@@ -253,7 +253,7 @@ private struct ConsoleContent: View {
         switch model.state {
         case .live:
             let size = model.videoSize
-            let mode = model.activeVideoMode == .h264 ? "H.264" : "MJPEG · \(model.fps) fps"
+            let mode = model.activeVideoMode == .h264 ? "H.264" : "\(model.frameCodec) · \(model.fps) fps"
             return "\(Int(size.width))×\(Int(size.height)) · \(mode)"
                 + (model.mouseCaptured ? " · Control+Option releases the mouse" : "")
         case .connecting: return "Connecting…"

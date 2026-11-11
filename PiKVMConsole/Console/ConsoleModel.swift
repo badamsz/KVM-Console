@@ -75,6 +75,9 @@ final class ConsoleModel {
     private(set) var videoMode = ConsolePreferences.videoMode
     /// The mode in use right now; differs from `videoMode` after a fallback.
     var activeVideoMode: VideoMode = .mjpeg
+    /// What the frames shown in `.mjpeg` mode are decoded from: "MJPEG", or
+    /// "H.264" for a NanoKVM that only streams H.264.
+    var frameCodec = "MJPEG"
     /// Set when H.264 was requested but the console fell back to MJPEG.
     var fallbackReason: String?
     /// The view WebRTC draws into, while H.264 is active.
@@ -370,6 +373,7 @@ final class ConsoleModel {
     private func startStream(client: KVMDClient, generation gen: Int) {
         guard gen == generation else { return }
         activeVideoMode = .mjpeg
+        frameCodec = "MJPEG"
         streamer?.stop()
         streamer = try? MJPEGStreamer(client: client, onFrame: { [weak self] data in
             guard let image = ConsoleModel.decode(data) else { return }
@@ -402,7 +406,7 @@ final class ConsoleModel {
 
     /// kvmd reports whether the capture source has a signal. Without one
     /// the streamer sends no frames at all.
-    private func sourceOnline(_ online: Bool) {
+    func sourceOnline(_ online: Bool) {
         if !online {
             frame = nil
             fps = 0

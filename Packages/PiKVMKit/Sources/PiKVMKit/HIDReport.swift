@@ -138,6 +138,68 @@ public enum HIDReport {
     }
 }
 
+/// Input messages for newer Sipeed firmware (NanoKVM Go), whose web page
+/// sends every report through an "input router" message on `/api/ws`:
+///
+///     [3, version 1, source, report type, flags 0,
+///      sequence u32 LE, timestamp ms u32 LE, payload...]
+///
+/// Payloads:
+/// * Keyboard (type 1): the 8-byte boot report.
+/// * Relative pointer (type 2): `[buttons, dx i16, dy i16, wheel i16]`, LE.
+/// * Absolute pointer (type 3): `[buttons, x u16, y u16, wheel i16]`, LE,
+///   with x and y in 0...65535.
+public struct NanoKVMInputRouter: Sendable {
+    public enum Source: UInt8, Sendable {
+        case keyboard = 1
+        case pointer = 2
+    }
+
+    public enum ReportType: UInt8, Sendable {
+        case keyboard = 1
+        case relativePointer = 2
+        case absolutePointer = 3
+    }
+
+    public private(set) var sequence: UInt32 = 0
+
+    public init() {}
+
+    /// Wraps a report, numbering it. `timestamp` is in milliseconds.
+    public mutating func message(source: Source, type: ReportType, payload: Data, timestamp: UInt32) -> Data {
+        sequence &+= 1
+        var data = Data([3, 1, source.rawValue, type.rawValue, 0])
+        data.append(Self.le32(sequence))
+        data.append(Self.le32(timestamp))
+        data.append(payload)
+        return data
+    }
+
+    public static func relativePointer(buttons: UInt8, dx: Int = 0, dy: Int = 0, wheel: Int = 0) -> Data {
+        Data([buttons & 0x1F]) + le16(clamp16(dx)) + le16(clamp16(dy)) + le16(clamp16(wheel))
+    }
+
+    /// `x` and `y` in 0...65535.
+    public static func absolutePointer(buttons: UInt8, x: UInt16, y: UInt16, wheel: Int = 0) -> Data {
+        Data([buttons & 0x1F]) + le16(x) + le16(y) + le16(clamp16(wheel))
+    }
+
+    /// Converts a 0...32767 position (`HIDReport.absolutePosition`) to 0...65535.
+    public static func widen(_ v: UInt16) -> UInt16 {
+        UInt16((Double(min(v, 32767)) / 32767 * 65535).rounded())
+    }
+
+    private static func clamp16(_ v: Int) -> UInt16 {
+        UInt16(bitPattern: Int16(max(-32768, min(32767, v))))
+    }
+
+    private static func le16(_ v: UInt16) -> Data { Data([UInt8(v & 0xFF), UInt8(v >> 8)]) }
+
+    private static func le32(_ v: UInt32) -> Data {
+        Data([UInt8(v & 0xFF), UInt8((v >> 8) & 0xFF), UInt8((v >> 16) & 0xFF), UInt8(v >> 24)])
+    }
+}
+
 /// Messages on a NanoKVM's `/api/ws` socket: a type byte, then a HID report.
 public enum NanoKVMMessage {
     /// Heartbeat. The NanoKVM drops a socket that sends nothing for 90 seconds.
