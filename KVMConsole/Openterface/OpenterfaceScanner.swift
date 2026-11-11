@@ -21,6 +21,8 @@ struct OpenterfaceUnit: Identifiable, Hashable {
     /// The audio input's `uniqueID`, when one was found.
     let audioID: String?
     let audioName: String?
+    /// The USB serial number of the capture chip or controller, if either has one.
+    var serialNumber: String? = nil
 
     var displayName: String {
         let chips = [videoChip, controlChip].compactMap { $0 }
@@ -38,6 +40,7 @@ enum OpenterfaceScanner {
         let path: String
         let location: UInt32?
         let chip: String
+        var serialNumber: String? = nil
     }
 
     /// A serial port of any kind, for the USB Devices window.
@@ -48,6 +51,7 @@ enum OpenterfaceScanner {
         let location: UInt32?
         /// "CH9329" or "CH32V208" when it is an Openterface controller.
         let chip: String?
+        var serialNumber: String? = nil
     }
 
     /// A camera or microphone as AVFoundation sees it, for the USB Devices window.
@@ -129,6 +133,7 @@ enum OpenterfaceScanner {
                 }
             }
 
+            let videoSerial = location.flatMap { usbSerialNumber(atLocation: $0) }
             return OpenterfaceUnit(
                 id: video.uniqueID,
                 videoName: video.localizedName,
@@ -137,23 +142,16 @@ enum OpenterfaceScanner {
                 serialPath: serial?.path,
                 controlChip: serial?.chip,
                 audioID: audio?.uniqueID,
-                audioName: audio?.localizedName
+                audioName: audio?.localizedName,
+                serialNumber: videoSerial ?? serial?.serialNumber
             )
         }
-    }
-
-    /// The unit a saved device means: the one with its ID, or else the only
-    /// one plugged in (it may have moved to another USB port).
-    static func unit(for device: Device) -> OpenterfaceUnit? {
-        let units = scan()
-        if let id = device.localDeviceID, let match = units.first(where: { $0.id == id }) { return match }
-        return units.count == 1 || device.localDeviceID == nil ? units.first : nil
     }
 
     /// Serial ports whose USB device is an Openterface controller.
     static func serialPorts() -> [SerialPort] {
         allSerialPorts().compactMap { port in
-            port.chip.map { SerialPort(path: port.path, location: port.location, chip: $0) }
+            port.chip.map { SerialPort(path: port.path, location: port.location, chip: $0, serialNumber: port.serialNumber) }
         }
     }
 
@@ -180,9 +178,47 @@ enum OpenterfaceScanner {
                                                               product: UInt16(truncatingIfNeeded: product))]
             }
             let location = number(service, "locationID").map { UInt32(truncatingIfNeeded: $0) }
-            ports.append(AnySerialPort(path: path, vendor: vendor, product: product, location: location, chip: chip))
+            ports.append(AnySerialPort(path: path, vendor: vendor, product: product, location: location, chip: chip,
+                                       serialNumber: string(service, Self.serialNumberKey)))
         }
         return ports.sorted { $0.path < $1.path }
+    }
+
+    private static let serialNumberKey = "USB Serial Number"
+
+    /// The serial number of the USB device at a location ID, if it reports one.
+    static func usbSerialNumber(atLocation location: UInt32) -> String? {
+        guard let matching = IOServiceMatching("IOUSBHostDevice") else { return nil }
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer {
+                IOObjectRelease(service)
+                service = IOIteratorNext(iterator)
+            }
+            let value = IORegistryEntryCreateCFProperty(service, "locationID" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? NSNumber
+            guard let value, UInt32(truncatingIfNeeded: value.intValue) == location else { continue }
+            let serial = IORegistryEntryCreateCFProperty(service, serialNumberKey as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? String
+            return clean(serial)
+        }
+        return nil
+    }
+
+    /// A string property of the service or the nearest USB device above it.
+    private static func string(_ service: io_object_t, _ key: String) -> String? {
+        let options = IOOptionBits(kIORegistryIterateRecursively | kIORegistryIterateParents)
+        return clean(IORegistryEntrySearchCFProperty(service, kIOServicePlane, key as CFString, kCFAllocatorDefault, options) as? String)
+    }
+
+    /// Drops empty and placeholder serial numbers.
+    private static func clean(_ serial: String?) -> String? {
+        guard let s = serial?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty,
+              s.contains(where: { $0 != "0" }) else { return nil }
+        return s
     }
 
     /// A number property of the service or the nearest USB device above it.

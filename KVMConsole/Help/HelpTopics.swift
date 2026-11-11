@@ -225,9 +225,11 @@ extension HelpTopic {
         An Openterface Mini-KVM or KVM-GO (USB 2.0 or USB 3.0) connects the remote machine straight to this Mac by USB, with no network. Connect its host cable to the Mac, and its target cable and HDMI to the machine you want to control.
 
         ## Adding one
-        It appears under **Find Devices > Plugged into this Mac**. Or choose **Add Device…**, set the model to *Openterface (USB)* and pick the unit. **Look Again** checks for newly plugged-in units, and **Test Connection** says whether the keyboard and mouse controller and audio were found.
+        Plug it in and it appears in the sidebar as *Openterface* (then *Openterface 2*, and so on). Choose **Rename…** from its menu in the sidebar to give it a name. It leaves the sidebar when you unplug it and comes back with the same name and settings when you plug it in again, even after quitting the app.
 
-        A unit only shows in the sidebar once it has been added.
+        - A unit is recognised by the USB port it's in. If it reports a USB serial number, it's recognised in any port. Without one, a single unit moved to another port is still recognised, but two units that swap ports swap names.
+        - **Remove** takes a plugged-in unit off the list until it's unplugged and plugged in again.
+        - **KVM Console > Settings…** can stop units being added when they're plugged in, or keep unplugged ones in the sidebar. With adding turned off, add one from **Find Devices > Plugged into this Mac**, or with **Add Device…** and the *Openterface (USB)* model.
 
         ## USB Devices window
         **File > USB Devices…** (⇧⌘U) lists the Openterface units this Mac can see, with their video, keyboard and mouse controller and audio, and an **Add…** button for each. Below them it lists every camera, serial port and audio input, so you can tell a unit that isn't recognised from one that isn't connected. It also shows camera and microphone access, and **Copy Details** copies the whole list as text for a bug report.

@@ -24,6 +24,7 @@ struct KVMConsoleApp: App {
 
         Settings {
             SettingsView()
+                .environment(model)
         }
 
         Window("KVM Console Help", id: HelpCenter.windowID) {

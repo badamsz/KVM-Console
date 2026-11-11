@@ -88,7 +88,13 @@ struct USBDevicesView: View {
         }
     }
 
+    /// The name in the sidebar of the device this unit is, once it's in the list.
+    private func savedName(of unit: OpenterfaceUnit) -> String? {
+        app.pluggedUnits.first { $0.value.id == unit.id }.flatMap { app.device($0.key)?.name }
+    }
+
     private func refresh() {
+        app.refreshUSB()
         report = OpenterfaceScanner.report()
         scanned = Date()
     }
@@ -109,7 +115,7 @@ struct USBDevicesView: View {
                 .padding(.vertical, 2)
             }
             ForEach(report.units) { unit in
-                UnitRow(unit: unit, added: app.devices.contains { $0.localDeviceID == unit.id }) {
+                UnitRow(unit: unit, savedName: savedName(of: unit)) {
                     app.editorRequest = .discovered(Device(name: "Openterface", model: .openterface,
                                                            endpoints: [], username: "", localDeviceID: unit.id))
                     showMainWindow()
@@ -118,7 +124,7 @@ struct USBDevicesView: View {
         } header: {
             Text("Openterface")
         } footer: {
-            Text("A unit has to be added before it shows in the sidebar. Its keyboard and mouse need the serial port; its sound needs the audio input.")
+            Text("Units are added to the sidebar when they're plugged in, unless that's turned off in Settings. Rename one from its menu in the sidebar. Its keyboard and mouse need the serial port; its sound needs the audio input.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -148,7 +154,7 @@ struct USBDevicesView: View {
         lines.append("Openterface units:")
         if report.units.isEmpty { lines.append("  none") }
         for unit in report.units {
-            lines.append("  \(unit.displayName): video \(unit.id) (\(unit.videoName)), serial \(unit.serialPath ?? "none"), audio \(unit.audioName ?? "none")")
+            lines.append("  \(unit.displayName): video \(unit.id) (\(unit.videoName)), serial \(unit.serialPath ?? "none"), audio \(unit.audioName ?? "none"), USB serial number \(unit.serialNumber ?? "none"), listed as \(savedName(of: unit) ?? "not added")")
         }
         lines.append("Cameras:")
         for c in report.cameras { lines.append("  \(c.name) | \(c.uniqueID) | \(c.modelID)\(c.isOpenterface ? " | Openterface" : "")") }
@@ -174,7 +180,8 @@ struct USBDevicesView: View {
 
 private struct UnitRow: View {
     let unit: OpenterfaceUnit
-    let added: Bool
+    /// Its name in the sidebar, once added.
+    let savedName: String?
     let add: () -> Void
 
     var body: some View {
@@ -184,13 +191,19 @@ private struct UnitRow: View {
                 .foregroundStyle(.tint)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 3) {
-                Text(unit.displayName).fontWeight(.medium)
+                Text(savedName ?? unit.displayName).fontWeight(.medium)
+                if savedName != nil {
+                    Text(unit.displayName).font(.caption).foregroundStyle(.secondary)
+                }
                 part("Video", unit.videoName, ok: true)
                 part("Keyboard and mouse", unit.serialPath ?? "serial port not found", ok: unit.serialPath != nil)
                 part("Audio", unit.audioName ?? "not found", ok: unit.audioID != nil)
+                if let serial = unit.serialNumber {
+                    Text("USB serial number \(serial)").font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
             }
             Spacer()
-            if added {
+            if savedName != nil {
                 Label("Added", systemImage: "checkmark.circle.fill")
                     .labelStyle(.titleAndIcon)
                     .foregroundStyle(.secondary)

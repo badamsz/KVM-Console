@@ -189,7 +189,9 @@ struct DeviceEditorView: View {
         probe.resetCertificateTrust()
         if probe.family.isLocal {
             units = OpenterfaceScanner.scan()
-            if let unit = OpenterfaceScanner.unit(for: probe) {
+            let unit = probe.localDeviceID.map { id in units.first { $0.id == id } }
+                ?? (units.count == 1 ? units.first : nil)
+            if let unit {
                 var parts = ["Found \(unit.displayName)"]
                 parts.append(unit.serialPath == nil ? "but not its keyboard and mouse controller" : "with keyboard and mouse")
                 parts.append(unit.audioID == nil ? "and no audio" : "and audio")

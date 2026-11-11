@@ -5,6 +5,10 @@ import SwiftUI
 /// Preference keys shared by the app's scenes.
 enum AppPreferences {
     static let showMenuBarExtraKey = "app.showMenuBarExtra"
+    /// Add Openterface units to the list when they're plugged in (default on).
+    static let autoAddUSBKey = "usb.autoAdd"
+    /// List Openterface units in the sidebar while unplugged (default off).
+    static let showUnpluggedUSBKey = "usb.showUnplugged"
 }
 
 /// The menu bar item: every machine with its power state and quick actions.
@@ -202,13 +206,21 @@ private final class ActionMenuItem: NSMenuItem {
 
 /// The app's Settings window.
 struct SettingsView: View {
+    @Environment(AppModel.self) private var model
     @AppStorage(AppPreferences.showMenuBarExtraKey) private var showMenuBarExtra = true
     @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
+    @AppStorage(AppPreferences.autoAddUSBKey) private var autoAddUSB = true
+    @AppStorage(AppPreferences.showUnpluggedUSBKey) private var showUnpluggedUSB = false
 
     var body: some View {
         Form {
             Toggle("Show KVM Console in the menu bar", isOn: $showMenuBarExtra)
             Toggle("Hide the console toolbar in full screen", isOn: $hideToolbarInFullScreen)
+            Section("USB KVMs") {
+                Toggle("Add Openterface KVMs when they're plugged in", isOn: $autoAddUSB)
+                    .onChange(of: autoAddUSB) { _, on in if on { model.refreshUSB() } }
+                Toggle("List Openterface KVMs while unplugged", isOn: $showUnpluggedUSB)
+            }
         }
         .formStyle(.grouped)
         .frame(width: 420)

@@ -15,7 +15,7 @@ All four planned steps are in. Nothing has been through a wide range of hardware
 
 ## Openterface
 
-An Openterface Mini-KVM or KVM-GO (USB 2.0 or 3.0; any unit with an MS2109/MS2109S/MS2130S capture chip and a CH9329 or CH32V208 controller) plugged into the Mac shows up under **Find Devices > Plugged into this Mac**, or add it with **Add Device** and the *Openterface (USB)* model. The app finds its parts by USB vendor and product ID:
+An Openterface Mini-KVM or KVM-GO (USB 2.0 or 3.0; any unit with an MS2109/MS2109S/MS2130S capture chip and a CH9329 or CH32V208 controller) plugged into the Mac is added to the sidebar automatically (as *Openterface*, *Openterface 2*, …; rename it from its sidebar menu). It is hidden while unplugged and comes back with its name and settings when plugged in again, matched by USB serial number when the unit reports one, otherwise by USB port (a single unit that moved port is still matched). Settings can turn off adding units automatically or keep unplugged ones listed. The app finds its parts by USB vendor and product ID:
 
 - **Video and audio** come from the unit's USB camera and microphone through AVFoundation. macOS asks for camera and microphone access the first time.
 - **Keyboard and mouse** go out as CH9329 serial commands (absolute and relative mouse, per machine like the other devices). The controller is tried at 115200 baud, then 9600.
@@ -23,7 +23,7 @@ An Openterface Mini-KVM or KVM-GO (USB 2.0 or 3.0; any unit with an MS2109/MS210
 - On a KVM-GO (CH32V208 controller), the console's **MicroSD Card** menu connects the unit's microSD card to the target or to the Mac, and follows the unit's own switch button.
 - A KVM-GO's capture chip runs at USB 3 speed on the port's SuperSpeed side while its serial controller sits behind a USB 2 hub on the same port, so the two are matched by port path with the root port left out.
 
-**File > USB Devices…** (⇧⌘U) shows the units the app recognises, with an **Add…** button, plus every camera, serial port and audio input the Mac reports, the camera and microphone permissions, and a **Copy Details** button for bug reports. A unit appears in the sidebar only after it has been added.
+**File > USB Devices…** (⇧⌘U) shows the units the app recognises, with an **Add…** button, plus every camera, serial port and audio input the Mac reports, the camera and microphone permissions, and a **Copy Details** button for bug reports.
 
 The serial protocol is implemented from WCH's published CH9329 command set rather than from Openterface's own app, which is AGPL-licensed. Quit the Openterface app first; only one app can hold the serial port.
 

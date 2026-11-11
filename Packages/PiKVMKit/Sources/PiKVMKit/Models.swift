@@ -188,6 +188,9 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
     /// For a device plugged into this Mac (Openterface): which one, by the
     /// unique ID of its video capture device. Nil uses the first one found.
     public var localDeviceID: String?
+    /// For a device plugged into this Mac: its USB serial number, when it
+    /// reports one, so it is recognised in any USB port.
+    public var localSerialNumber: String?
 
     public init(
         id: UUID = UUID(),
@@ -198,7 +201,8 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         targets: [Target]? = nil,
         pinnedCertificateSHA256: String? = nil,
         certificateTrust: CertificateTrust? = nil,
-        localDeviceID: String? = nil
+        localDeviceID: String? = nil,
+        localSerialNumber: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -209,6 +213,7 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         self.pinnedCertificateSHA256 = pinnedCertificateSHA256
         self.certificateTrust = certificateTrust
         self.localDeviceID = localDeviceID
+        self.localSerialNumber = localSerialNumber
     }
 
     /// Records what the first successful connection saw: a CA-issued

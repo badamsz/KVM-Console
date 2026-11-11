@@ -56,7 +56,6 @@ final class DeviceSession {
     private var connection: Connection?
     private var nanoConnection: NanoKVMConnection?
     private var eventTask: Task<Void, Never>?
-    private var usbWatch: Task<Void, Never>?
     private var uploadTask: Task<Void, Never>?
 
     init(deviceID: UUID, model: AppModel) {
@@ -97,7 +96,8 @@ final class DeviceSession {
     func connect() async {
         guard let model, let device = model.device(deviceID) else { return }
         if device.family.isLocal {
-            connectLocal(device)
+            model.refreshUSB()
+            connectLocal()
             return
         }
         guard let password = model.credentials.password(for: deviceID) else {
@@ -126,43 +126,25 @@ final class DeviceSession {
         }
     }
 
-    /// Looks for the Openterface among the USB devices plugged in. The
+    /// Takes the Openterface this device is, if it is plugged in. The
     /// console opens its video and serial port itself.
-    private func connectLocal(_ device: Device) {
-        watchUSB()
-        guard let unit = OpenterfaceScanner.unit(for: device) else {
+    private func connectLocal() {
+        guard let unit = model?.pluggedUnits[deviceID] else {
             localUnit = nil
-            status = .failed("No Openterface is plugged into this Mac. Connect its USB-C host cable to this Mac.")
+            status = .failed("This Openterface isn't plugged into this Mac. Connect its USB-C host cable to this Mac.")
             return
         }
         localUnit = unit
         status = .connected(endpointLabel: "USB", host: unit.displayName)
-        if device.localDeviceID == nil {
-            // Remember which one, in case another is plugged in later.
-            model?.update(deviceID) { $0.localDeviceID = unit.id }
-        }
     }
 
-    /// Notices an Openterface being plugged in or unplugged.
-    private func watchUSB() {
-        guard usbWatch == nil else { return }
-        usbWatch = Task { [weak self] in
-            await withTaskGroup(of: Void.self) { group in
-                for name in [AVCaptureDevice.wasConnectedNotification, AVCaptureDevice.wasDisconnectedNotification] {
-                    group.addTask { @MainActor [weak self] in
-                        for await _ in NotificationCenter.default.notifications(named: name) {
-                            // Give the serial port and audio a moment to appear too.
-                            try? await Task.sleep(nanoseconds: 1_000_000_000)
-                            guard let self, let device = self.model?.device(self.deviceID) else { return }
-                            switch self.status {
-                            case .connecting: continue
-                            case .idle where self.localUnit == nil: continue
-                            default: self.connectLocal(device)
-                            }
-                        }
-                    }
-                }
-            }
+    /// The app noticed this device's Openterface being plugged in, unplugged
+    /// or moved to another port.
+    func usbChanged() {
+        switch status {
+        case .connecting: return
+        case .idle where localUnit == nil: return
+        default: connectLocal()
         }
     }
 
@@ -195,8 +177,6 @@ final class DeviceSession {
         nanoConnection = nil
         nanoInfo = nil
         localUnit = nil
-        usbWatch?.cancel()
-        usbWatch = nil
         downloadWatch?.cancel()
         downloadWatch = nil
         download = nil

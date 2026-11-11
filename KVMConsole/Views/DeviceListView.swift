@@ -4,11 +4,15 @@ import SwiftUI
 struct DeviceListView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
+    @AppStorage(AppPreferences.showUnpluggedUSBKey) private var showUnpluggedUSB = false
+    @State private var renaming: Device?
+    @State private var newName = ""
 
     var body: some View {
         @Bindable var model = model
+        let devices = model.visibleDevices(showUnplugged: showUnpluggedUSB)
         List(selection: $model.selection) {
-            ForEach(model.devices) { device in
+            ForEach(devices) { device in
                 if device.hasSwitch {
                     Section {
                         ForEach(device.targets) { target in
@@ -16,10 +20,12 @@ struct DeviceListView: View {
                                 .tag(TargetSelection(deviceID: device.id, targetID: target.id))
                         }
                     } header: {
-                        DeviceHeader(device: device)
+                        DeviceHeader(device: device, rename: startRenaming)
                     }
                 } else if let target = device.targets.first {
-                    TargetRow(device: device, target: target, subtitle: device.model.displayName)
+                    TargetRow(device: device, target: target,
+                              subtitle: device.family.isLocal && model.pluggedUnits[device.id] == nil
+                                  ? "Not plugged in" : device.model.displayName)
                         .tag(TargetSelection(deviceID: device.id, targetID: target.id))
                 }
             }
@@ -28,13 +34,13 @@ struct DeviceListView: View {
         // port makes that port active; otherwise it opens the console.
         .contextMenu(forSelectionType: TargetSelection.self) { items in
             if let item = items.first, let device = model.device(item.deviceID) {
-                TargetMenu(device: device, targetID: item.targetID)
+                TargetMenu(device: device, targetID: item.targetID, rename: startRenaming)
             }
         } primaryAction: { items in
             if let item = items.first, !model.switchPort(to: item) { openWindow(value: item) }
         }
         .overlay {
-            if model.devices.isEmpty {
+            if devices.isEmpty {
                 ContentUnavailableView {
                     Label("No Devices", systemImage: "server.rack")
                 } actions: {
@@ -50,11 +56,25 @@ struct DeviceListView: View {
             .help("Find PiKVMs and NanoKVMs on your network, and Openterface KVMs plugged into this Mac")
             Button { model.editorRequest = .new } label: { Label("Add Device", systemImage: "plus") }
         }
+        .alert("Rename \(renaming?.name ?? "")", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: $newName)
+            Button("Rename") {
+                if let renaming { model.rename(renaming.id, to: newName) }
+                renaming = nil
+            }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+    }
+
+    private func startRenaming(_ device: Device) {
+        newName = device.name
+        renaming = device
     }
 }
 
 private struct DeviceHeader: View {
     let device: Device
+    let rename: (Device) -> Void
 
     var body: some View {
         HStack {
@@ -62,7 +82,7 @@ private struct DeviceHeader: View {
             Spacer()
             Text(device.model.displayName).foregroundStyle(.secondary)
         }
-        .contextMenu { DeviceMenu(device: device) }
+        .contextMenu { DeviceMenu(device: device, rename: rename) }
     }
 }
 
@@ -71,6 +91,7 @@ private struct TargetMenu: View {
     @Environment(\.openWindow) private var openWindow
     let device: Device
     let targetID: UUID
+    let rename: (Device) -> Void
 
     var body: some View {
         let selection = TargetSelection(deviceID: device.id, targetID: targetID)
@@ -82,15 +103,17 @@ private struct TargetMenu: View {
             }
             Divider()
         }
-        DeviceMenu(device: device)
+        DeviceMenu(device: device, rename: rename)
     }
 }
 
 private struct DeviceMenu: View {
     @Environment(AppModel.self) private var model
     let device: Device
+    let rename: (Device) -> Void
 
     var body: some View {
+        Button("Rename…") { rename(device) }
         Button("Edit…") { model.editorRequest = .edit(device.id) }
         Button("Reconnect") { Task { await model.session(for: device.id).connect() } }
         if device.family == .pikvm {
