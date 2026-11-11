@@ -231,14 +231,17 @@ final class DeviceSession {
 
         mediaError = nil
         upload = MediaUpload(name: name, sent: 0, total: size)
+        // Called off the main thread. It holds the session only while the upload runs.
+        let session = self
+        let report: @Sendable (Int64, Int64) -> Void = { sent, total in
+            Task { @MainActor in
+                guard session.upload?.name == name else { return }
+                session.upload = MediaUpload(name: name, sent: sent, total: total)
+            }
+        }
         uploadTask = Task { [weak self] in
             do {
-                try await client.msdUpload(fileURL: fileURL, as: name) { sent, total in
-                    Task { @MainActor [weak self] in
-                        guard let self, self.upload?.name == name else { return }
-                        self.upload = MediaUpload(name: name, sent: sent, total: total)
-                    }
-                }
+                try await client.msdUpload(fileURL: fileURL, as: name, progress: report)
             } catch {
                 let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
                 if !cancelled {
