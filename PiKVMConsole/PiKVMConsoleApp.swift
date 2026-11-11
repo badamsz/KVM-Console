@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct PiKVMConsoleApp: App {
     @State private var model = AppModel()
+    @AppStorage(AppPreferences.showMenuBarExtraKey) private var showMenuBarExtra = true
 
     var body: some Scene {
         WindowGroup("PiKVM Console", id: "main") {
@@ -21,6 +22,18 @@ struct PiKVMConsoleApp: App {
             }
         }
         .defaultSize(width: 1280, height: 760)
+
+        // Quick access to every machine without opening the main window.
+        MenuBarExtra(isInserted: $showMenuBarExtra) {
+            MenuBarMenu()
+                .environment(model)
+        } label: {
+            Image("MenuBarIcon")
+        }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
 
@@ -28,8 +41,31 @@ struct AppCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
     @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
+    @FocusedValue(\.console) private var console
 
     var body: some Commands {
+        // Acts on the console window in front. Its shortcuts all use Control+Command,
+        // which the console keeps for the Mac instead of sending to the remote machine.
+        CommandMenu("Console") {
+            Group {
+                Button("Send Ctrl+Alt+Del") { console?.sendCombo(["ControlLeft", "AltLeft", "Delete"]) }
+                    .keyboardShortcut(.delete, modifiers: [.control, .command])
+                Button("Paste Clipboard as Typing") { console?.pasteClipboard() }
+                    .keyboardShortcut("v", modifiers: [.option, .command])
+                Divider()
+                Button(console?.mouseMode == .relative ? "Use Absolute Mouse" : "Use Relative Mouse") {
+                    console?.toggleMouseMode()
+                }
+                .keyboardShortcut("m", modifiers: [.control, .command])
+                Button("Virtual Media…") { console?.showingMedia = true }
+                    .keyboardShortcut("i", modifiers: [.control, .command])
+                Divider()
+                Button("Reconnect Video") { console?.reconnect() }
+                    .keyboardShortcut("r", modifiers: [.control, .command])
+            }
+            .disabled(console == nil)
+        }
+
         CommandGroup(after: .toolbar) {
             Toggle("Hide Toolbar in Full Screen", isOn: $hideToolbarInFullScreen)
                 .keyboardShortcut("t", modifiers: [.command, .control])

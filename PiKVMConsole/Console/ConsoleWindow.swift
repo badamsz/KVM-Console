@@ -36,7 +36,6 @@ private struct ConsoleContent: View {
     @State private var pendingPower: PowerConfirmation?
     @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
     @State private var powerActionRunning = false
-    @State private var showingMedia = false
 
     /// Power actions that interrupt the machine and so ask first.
     private enum PowerConfirmation {
@@ -84,7 +83,8 @@ private struct ConsoleContent: View {
         .background(Color.black.ignoresSafeArea())
         .navigationTitle(model.target?.name ?? "Console")
         .navigationSubtitle(subtitle)
-        .sheet(isPresented: $showingMedia) { VirtualMediaView(deviceID: model.selection.deviceID).environment(app) }
+        .focusedSceneValue(\.console, model)
+        .sheet(isPresented: Binding(get: { model.showingMedia }, set: { model.showingMedia = $0 })) { VirtualMediaView(deviceID: model.selection.deviceID).environment(app) }
         // In full screen the video can have the whole display; View > Hide Toolbar in Full Screen turns this off.
         .toolbar(model.isFullScreen && hideToolbarInFullScreen ? .hidden : .automatic, for: .windowToolbar)
         .toolbar {
@@ -162,7 +162,7 @@ private struct ConsoleContent: View {
 
                 if session.msd?.enabled == true {
                     let mediaConnected = session.msd?.drive?.connected == true
-                    Button { showingMedia = true } label: {
+                    Button { model.showingMedia = true } label: {
                         Label("Virtual Media", systemImage: mediaConnected ? "opticaldisc.fill" : "opticaldisc")
                     }
                     .help(mediaConnected ? "Virtual drive: \(session.msd?.drive?.image?.name ?? "connected")" : "Mount an ISO or disk image")

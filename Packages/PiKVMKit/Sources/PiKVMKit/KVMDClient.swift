@@ -209,6 +209,55 @@ public final class KVMDClient: Sendable {
         _ = try Self.decode(Empty.self, data: data, response: response)
     }
 
+    // MARK: Screen preview
+
+    /// A JPEG of the remote screen, scaled to fit the given size.
+    ///
+    /// kvmd only runs its video streamer while someone is watching. If it is
+    /// stopped, this opens a console session for a few seconds to start it.
+    /// Behind a Switch the picture is of the active port.
+    public func snapshot(maxWidth: Int = 640, maxHeight: Int = 400) async throws -> Data {
+        let query = [
+            "preview": "1",
+            "preview_max_width": String(maxWidth),
+            "preview_max_height": String(maxHeight),
+            "preview_quality": "80",
+            // With no video signal, return the streamer's placeholder instead of an error.
+            "allow_offline": "1",
+        ]
+        do {
+            return try await fetchSnapshot(query)
+        } catch KVMDError.http(503) {
+            // The streamer isn't running; start it below.
+        }
+        let socket = try consoleSocket()
+        socket.resume()
+        defer { socket.cancel(with: .goingAway, reason: nil) }
+        for _ in 0..<12 {
+            try await Task.sleep(nanoseconds: 750_000_000)
+            do {
+                return try await fetchSnapshot(query)
+            } catch KVMDError.http(503) {
+                continue
+            }
+        }
+        throw KVMDError.api("The PiKVM's video didn't start in time.")
+    }
+
+    private func fetchSnapshot(_ query: [String: String]) async throws -> Data {
+        let req = try makeRequest("api/streamer/snapshot", query: query)
+        let (data, response) = try await session.data(for: req)
+        try Self.checkSnapshot(data: data, response: response)
+        return data
+    }
+
+    static func checkSnapshot(data: Data, response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse else { return }
+        if http.statusCode == 401 || http.statusCode == 403 { throw KVMDError.unauthorized }
+        guard (200..<300).contains(http.statusCode) else { throw KVMDError.http(http.statusCode) }
+        guard !data.isEmpty else { throw KVMDError.api("The PiKVM returned an empty picture.") }
+    }
+
     // MARK: Console
 
     /// Opens the session websocket used by the console. `stream=1` asks kvmd

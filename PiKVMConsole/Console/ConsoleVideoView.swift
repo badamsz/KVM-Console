@@ -358,9 +358,9 @@ final class ConsoleNSView: NSView {
         guard window?.firstResponder === self, event.type == .keyDown else { return false }
         // Keep Ctrl+Cmd+F (full screen) for the Mac.
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if flags.contains([.command, .control]), event.keyCode == 3 { return false }
-        // Keep Ctrl+Cmd+T (show or hide the toolbar in full screen) for the Mac too.
-        if flags.contains([.command, .control]), event.keyCode == 17 { return false }
+        // Also the app's other Control+Command shortcuts: T (toolbar in full screen), Delete
+        // (Ctrl+Alt+Del), M (mouse mode), I (virtual media) and R (reconnect).
+        if flags.contains([.command, .control]), [3, 17, 51, 46, 34, 15].contains(event.keyCode) { return false }
         // Option+Cmd+V types the Mac clipboard on the remote machine.
         if flags.subtracting([.capsLock, .numericPad, .function]) == [.command, .option], event.keyCode == 9 {
             if !event.isARepeat {

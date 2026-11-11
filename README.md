@@ -4,12 +4,12 @@ A native macOS app (macOS 14+) for remote control and management of [PiKVM](http
 
 ## Status
 
-Step 3 of 4: management. Virtual media (ISO upload and mounting) and ATX power are in.
+All four planned steps are in. Nothing has been through a wide range of hardware yet, so expect rough edges.
 
 1. **Foundation**: device list, LAN → Tailscale fallback, Keychain credentials, kvmd API client, PiKVM Switch ports as targets, per-port mouse mode. ✅
 2. **Console**: H.264 video and audio (WebRTC), MJPEG fallback, keyboard and mouse (absolute and relative), full screen. ✅
 3. **Management**: ISO upload and mounting ✅, ATX power ✅, switch port control ✅.
-4. **Polish**: menu bar quick view, shortcuts, signed build.
+4. **Polish**: menu bar quick view, screen previews, shortcuts, release build script. ✅
 
 ## Building
 
@@ -33,10 +33,22 @@ xcodegen generate
 
 A free personal team works. `Config/Local.xcconfig` is ignored by git and survives `xcodegen generate`. The first launch after this asks once more; choose **Always Allow** and it stays quiet from then on.
 
+### Release build
+
+`scripts/release.sh` builds a Release copy into `dist/`. It needs `Config/Local.xcconfig` (above).
+
+- `scripts/release.sh` signs with your development identity. Good for your own Macs.
+- `scripts/release.sh --notarize` signs with Developer ID and has Apple notarize it, so it opens on any Mac without a warning. This needs a paid Apple Developer Program membership and notary credentials stored once with `xcrun notarytool store-credentials pikvm-console`; the script's header has the full command.
+
 ## Layout
 
 - `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), Keychain and JSON storage.
 - `PiKVMConsole`: the SwiftUI app.
+
+## Menu bar and previews
+
+- The menu bar item lists every machine with its power state. Each one has Open Console, Show in Main Window and, with ATX, the power actions. Turn the item off in **Settings** (⌘,).
+- A machine's page shows a still picture of its screen. **Refresh** takes a new one, and double-clicking it opens the console. PiKVM only runs its video while someone is watching, so a refresh may take a few seconds while the video starts. Behind a Switch, only the active port can be refreshed.
 
 ## Using the console
 
@@ -46,6 +58,7 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 - When a machine has ATX wired up (directly or through the Switch), the console toolbar shows its power and disk-activity lights and a **Power** menu with Power On, Shut Down, Reset and Force Off. Reset and Force Off ask first. Machines without ATX don't show them.
 - **Video** menu: H.264 (WebRTC) is the default and carries audio; MJPEG is the fallback and is used automatically if H.264 can't connect. The **Audio** menu appears when the PiKVM offers audio.
 - **Paste as typing** (⌥⌘V, or the Send Keys menu) types the Mac clipboard's text on the remote machine. Pick the typing speed in the same menu; slower speeds suit BIOS screens and laggy machines. Text longer than 200 characters or with line breaks asks first. The PiKVM maps characters using its own keymap setting (US by default), so the remote machine's layout must match it.
+- The **Console** menu has shortcuts for the window in front: ⌃⌘⌫ sends Ctrl+Alt+Del, ⌃⌘M switches the mouse mode, ⌃⌘I opens virtual media, and ⌃⌘R reconnects. These Control+Command combinations stay on the Mac and are not sent to the remote machine.
 - Keys are sent by physical position, so the remote machine's keyboard layout decides the character.
 
 ## Virtual media (ISOs and disk images)

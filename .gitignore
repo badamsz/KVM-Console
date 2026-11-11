@@ -3,6 +3,7 @@
 xcuserdata/
 DerivedData/
 build/
+dist/
 *.xcworkspace/xcuserdata/
 # SwiftPM
 .build/

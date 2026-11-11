@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import PiKVMKit
@@ -25,6 +26,16 @@ final class DeviceSession {
     private(set) var msd: MSDState?
     /// An image upload started from this app.
     private(set) var upload: MediaUpload?
+    /// The latest screen preview of each machine, by target id.
+    private(set) var previews: [UUID: ScreenPreview] = [:]
+    private(set) var previewsLoading: Set<UUID> = []
+
+    struct ScreenPreview {
+        var image: NSImage?
+        var date: Date?
+        var error: String?
+    }
+
     /// The last virtual media problem, shown in the media panel.
     var mediaError: String?
 
@@ -179,6 +190,31 @@ final class DeviceSession {
             try await client.switchATXClick(port: port, button)
         } else {
             try await client.atxClick(button)
+        }
+    }
+
+    // MARK: Screen preview
+
+    /// Whether `target` is what the PiKVM's video shows right now. Behind a
+    /// Switch that is only the active port.
+    func isOnScreen(_ target: Target) -> Bool {
+        target.switchPort == nil || switchState?.activePort == target.switchPort
+    }
+
+    /// Takes a fresh picture of the machine's screen.
+    func refreshPreview(for target: Target) async {
+        guard let client, isOnScreen(target), !previewsLoading.contains(target.id) else { return }
+        previewsLoading.insert(target.id)
+        defer { previewsLoading.remove(target.id) }
+        do {
+            let data = try await client.snapshot()
+            guard let image = NSImage(data: data) else { throw KVMDError.api("The PiKVM returned a picture this Mac can't read.") }
+            previews[target.id] = ScreenPreview(image: image, date: Date(), error: nil)
+        } catch is CancellationError {
+        } catch {
+            var preview = previews[target.id] ?? ScreenPreview()
+            preview.error = error.localizedDescription
+            previews[target.id] = preview
         }
     }
 
