@@ -37,6 +37,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
         NSLocalNetworkUsageDescription: PiKVM Console connects to PiKVM devices on your local network.
+        NSMicrophoneUsageDescription: PiKVM Console sends your microphone to the remote machine when you turn on Send Microphone in a console.
+        NSCameraUsageDescription: PiKVM Console sends your camera to the remote machine when you turn on Send Camera in a console.
     entitlements:
       path: PiKVMConsole/PiKVMConsole.entitlements
       properties:
@@ -44,6 +46,9 @@ targets:
         com.apple.security.network.client: true
         # WebRTC receives media on UDP ports it opens itself.
         com.apple.security.network.server: true
+        # Microphone and camera passthrough to the remote machine.
+        com.apple.security.device.audio-input: true
+        com.apple.security.device.camera: true
         # Reading ISO and disk images the user picks for upload.
         com.apple.security.files.user-selected.read-only: true
     settings:

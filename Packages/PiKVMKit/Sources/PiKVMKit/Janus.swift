@@ -24,9 +24,14 @@ public enum JanusMessage {
         message(body: ["request": "features"], session: session, handle: handle, transaction: transaction)
     }
 
-    public static func watch(audio: Bool, session: Int64, handle: Int64, transaction: String) -> [String: Any] {
+    /// - Parameters:
+    ///   - audio: receive the remote machine's audio.
+    ///   - mic: send this Mac's microphone to the remote machine.
+    ///   - camera: send this Mac's camera to the remote machine.
+    public static func watch(audio: Bool, mic: Bool = false, camera: Bool = false,
+                             session: Int64, handle: Int64, transaction: String) -> [String: Any] {
         message(body: ["request": "watch",
-                       "params": ["orientation": 0, "audio": audio, "mic": false, "camera": false]],
+                       "params": ["orientation": 0, "audio": audio, "mic": mic, "camera": camera]],
                 session: session, handle: handle, transaction: transaction)
     }
 
@@ -59,12 +64,37 @@ public enum JanusMessage {
 
 /// What the streamer plugin reports it can do.
 public struct JanusFeatures: Equatable, Sendable {
+    /// What the remote machine's camera driver asked for once it opened the
+    /// PiKVM's virtual webcam.
+    public struct CameraRequest: Equatable, Sendable {
+        public var width: Int
+        public var height: Int
+        public var fps: Int
+
+        public init(width: Int, height: Int, fps: Int) {
+            self.width = width
+            self.height = height
+            self.fps = fps
+        }
+    }
+
+    /// The PiKVM can send the remote machine's audio.
     public var audio: Bool
+    /// The PiKVM presents a USB microphone to the remote machine and accepts audio for it.
+    public var mic: Bool
+    /// The PiKVM presents a USB webcam to the remote machine.
+    public var camera: Bool
+    /// Set while an app on the remote machine is using that webcam and nobody
+    /// else is feeding it. Video can only be sent while this is set.
+    public var cameraRequest: CameraRequest?
     /// A STUN/TURN URL configured on the PiKVM, if any.
     public var iceURL: String?
 
-    public init(audio: Bool, iceURL: String? = nil) {
+    public init(audio: Bool, mic: Bool = false, camera: Bool = false, cameraRequest: CameraRequest? = nil, iceURL: String? = nil) {
         self.audio = audio
+        self.mic = mic
+        self.camera = camera
+        self.cameraRequest = cameraRequest
         self.iceURL = iceURL
     }
 }
@@ -77,6 +107,8 @@ public enum JanusIncoming: Equatable, Sendable {
     /// A Janus-level error (bad session, unknown plugin, ...).
     case error(transaction: String?, reason: String)
     case features(JanusFeatures)
+    /// The remote machine's use of the virtual webcam changed: `online`, `offline` or `lost`.
+    case camera(action: String)
     /// Plugin status: `starting`, `started`, `stopped`.
     case status(String)
     /// An SDP offer from the plugin.
@@ -110,8 +142,21 @@ public enum JanusIncoming: Equatable, Sendable {
             if let result = data["result"] as? [String: Any], let status = result["status"] as? String {
                 if status == "features", let f = result["features"] as? [String: Any] {
                     let ice = (f["ice"] as? [String: Any])?["url"] as? String
+                    let camera = f["camera"] as? [String: Any]
+                    var request: JanusFeatures.CameraRequest?
+                    if let req = camera?["request"] as? [String: Any],
+                       let res = req["resolution"] as? [String: Any],
+                       let w = (res["width"] as? NSNumber)?.intValue, let h = (res["height"] as? NSNumber)?.intValue,
+                       w > 0, h > 0 {
+                        request = .init(width: w, height: h, fps: max(1, (req["fps"] as? NSNumber)?.intValue ?? 30))
+                    }
                     out.append(.features(JanusFeatures(audio: f["audio"] as? Bool ?? false,
+                                                       mic: f["mic"] as? Bool ?? false,
+                                                       camera: camera?["enabled"] as? Bool ?? false,
+                                                       cameraRequest: request,
                                                        iceURL: (ice?.isEmpty == false) ? ice : nil)))
+                } else if status == "camera", let action = (result["camera"] as? [String: Any])?["action"] as? String {
+                    out.append(.camera(action: action))
                 } else {
                     out.append(.status(status))
                 }
@@ -187,8 +232,9 @@ public actor JanusSession {
         try await send(JanusMessage.features(session: session, handle: handle, transaction: Self.newTransaction()))
     }
 
-    public func watch(audio: Bool) async throws {
-        try await send(JanusMessage.watch(audio: audio, session: session, handle: handle, transaction: Self.newTransaction()))
+    public func watch(audio: Bool, mic: Bool = false, camera: Bool = false) async throws {
+        try await send(JanusMessage.watch(audio: audio, mic: mic, camera: camera,
+                                          session: session, handle: handle, transaction: Self.newTransaction()))
     }
 
     public func start(answerSDP: String) async throws {

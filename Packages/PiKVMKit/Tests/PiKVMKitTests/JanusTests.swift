@@ -16,6 +16,17 @@ final class JanusTests: XCTestCase {
         XCTAssertEqual(parse(json), [.features(JanusFeatures(audio: true, iceURL: "stun:stun.example.net:3478"))])
     }
 
+    func testFeaturesWithMicAndCameraRequest() {
+        let json = #"{"janus":"event","plugindata":{"data":{"result":{"status":"features","features":{"audio":true,"mic":true,"camera":{"enabled":true,"request":{"resolution":{"width":1280,"height":720},"fps":30}},"ice":{"url":""}}}}}}"#
+        XCTAssertEqual(parse(json), [.features(JanusFeatures(audio: true, mic: true, camera: true,
+                                                             cameraRequest: .init(width: 1280, height: 720, fps: 30)))])
+    }
+
+    func testCameraEvent() {
+        let json = #"{"janus":"event","plugindata":{"data":{"ustreamer":"event","result":{"status":"camera","camera":{"action":"online"}}}}}"#
+        XCTAssertEqual(parse(json), [.camera(action: "online")])
+    }
+
     func testFeaturesWithoutIce() {
         let json = #"{"janus":"event","plugindata":{"data":{"result":{"status":"features","features":{"audio":false,"ice":{"url":""}}}}}}"#
         XCTAssertEqual(parse(json), [.features(JanusFeatures(audio: false, iceURL: nil))])
