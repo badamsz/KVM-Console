@@ -225,7 +225,14 @@ extension HelpTopic {
         An Openterface Mini-KVM or KVM-GO (USB 2.0 or USB 3.0) connects the remote machine straight to this Mac by USB, with no network. Connect its host cable to the Mac, and its target cable and HDMI to the machine you want to control.
 
         ## Adding one
-        It appears under **Find Devices > Plugged into this Mac**. Or choose **Add Device…**, set the model to *Openterface (USB)* and pick the unit. **Look Again** checks for newly plugged-in units, and **Test Connection** says whether the keyboard and mouse controller and audio were found.
+        Plug it in and it appears in the sidebar as *Openterface* (then *Openterface 2*, and so on). Choose **Rename…** from its menu in the sidebar to give it a name. It leaves the sidebar when you unplug it and comes back with the same name and settings when you plug it in again, even after quitting the app.
+
+        - A unit is recognised by the USB port it's in. If it reports a USB serial number, it's recognised in any port. Without one, a single unit moved to another port is still recognised, but two units that swap ports swap names.
+        - **Remove** takes a plugged-in unit off the list until it's unplugged and plugged in again.
+        - **KVM Console > Settings…** can stop units being added when they're plugged in, or keep unplugged ones in the sidebar. With adding turned off, add one from **Find Devices > Plugged into this Mac**, or with **Add Device…** and the *Openterface (USB)* model.
+
+        ## USB Devices window
+        **File > USB Devices…** (⇧⌘U) lists the Openterface units this Mac can see, with their video, keyboard and mouse controller and audio, and an **Add…** button for each. Below them it lists every camera, serial port and audio input, so you can tell a unit that isn't recognised from one that isn't connected. It also shows camera and microphone access, and **Copy Details** copies the whole list as text for a bug report.
 
         - Video and sound arrive as a USB camera and microphone, so macOS asks for camera and microphone access the first time. If you said no, turn KVM Console on in **System Settings > Privacy & Security > Camera** and **Microphone**.
         - The keyboard and mouse go through the unit's serial controller, with absolute or relative mouse like the other devices.
@@ -325,6 +332,7 @@ extension HelpTopic {
         ## Main window
         = ⇧⌘N | Add a device
         = ⇧⌘F | Find devices on the network
+        = ⇧⌘U | Show USB devices
         = ⌘↩ | Open the console for the selected machine
         = Return | Make the selected machine's Switch port active
         = ⌘, | Settings
@@ -378,7 +386,7 @@ extension HelpTopic {
         The menu only appears when the PiKVM offers them. Turn on the USB microphone or webcam in [Configuring a PiKVM](help:configure-pikvm) and reboot it.
 
         ## The Openterface doesn't respond
-        Quit the Openterface app, unplug the unit and plug it in again, then press **Look Again** in the device editor. Allow camera and microphone access in System Settings if you said no.
+        Quit the Openterface app, unplug the unit and plug it in again, then press **Look Again** in the device editor. **File > USB Devices…** shows whether the Mac sees its camera, serial port and audio. Allow camera and microphone access in System Settings if you said no.
 
         ## macOS keeps asking to use Keychain items
         A development build signed "to run locally" looks like a new app after each rebuild. Choose **Always Allow**, or build with a signing team as described in the README.

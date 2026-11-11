@@ -24,12 +24,20 @@ struct KVMConsoleApp: App {
 
         Settings {
             SettingsView()
+                .environment(model)
         }
 
         Window("KVM Console Help", id: HelpCenter.windowID) {
             HelpView()
         }
         .defaultSize(width: 920, height: 640)
+        .commandsRemoved()
+
+        Window("USB Devices", id: USBDevicesView.windowID) {
+            USBDevicesView()
+                .environment(model)
+        }
+        .defaultSize(width: 640, height: 600)
         .commandsRemoved()
     }
 }
@@ -81,6 +89,8 @@ struct AppCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             Button("Find Devices on Network…") { model.showingDiscovery = true }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
+            Button("USB Devices…") { openWindow(id: USBDevicesView.windowID) }
+                .keyboardShortcut("u", modifiers: [.command, .shift])
             Button("Open Console") {
                 if let selection = model.selection { openWindow(value: selection) }
             }
