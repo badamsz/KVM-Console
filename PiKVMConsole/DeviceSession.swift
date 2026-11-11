@@ -3,9 +3,12 @@ import Foundation
 import Observation
 import PiKVMKit
 
-/// A live connection to one PiKVM: picks a reachable endpoint, keeps ATX,
-/// HID and Switch state fresh from the kvmd event socket, and applies the
-/// selected target's saved settings.
+/// A live connection to one device: picks a reachable endpoint, keeps ATX,
+/// HID and Switch state fresh (from the kvmd event socket, or by polling a
+/// Sipeed NanoKVM), and applies the selected target's saved settings.
+///
+/// A PiKVM is driven through `client` (kvmd); a Sipeed device through
+/// `nanoClient`. Exactly one of them is set while connected.
 @MainActor
 @Observable
 final class DeviceSession {
@@ -49,6 +52,7 @@ final class DeviceSession {
 
     private weak var model: AppModel?
     private var connection: Connection?
+    private var nanoConnection: NanoKVMConnection?
     private var eventTask: Task<Void, Never>?
     private var uploadTask: Task<Void, Never>?
 
@@ -57,7 +61,19 @@ final class DeviceSession {
         self.model = model
     }
 
+    /// The kvmd client, while connected to a PiKVM.
     var client: KVMDClient? { connection?.client }
+    /// The NanoKVM client, while connected to a Sipeed device.
+    var nanoClient: NanoKVMClient? { nanoConnection?.client }
+    /// Connected to either kind of device.
+    var isConnected: Bool { client != nil || nanoClient != nil }
+    /// The NanoKVM application version, while connected to a Sipeed device.
+    private(set) var nanoInfo: NanoKVMInfo?
+
+    /// Which API this device speaks.
+    var family: DeviceFamily { model?.device(deviceID)?.family ?? .pikvm }
+    /// Whether images can be uploaded from this Mac (kvmd only, for now).
+    var supportsImageUpload: Bool { family == .pikvm }
 
     func connectIfNeeded() async {
         switch status {
@@ -73,6 +89,10 @@ final class DeviceSession {
             return
         }
         status = .connecting
+        if device.family.isSipeed {
+            await connectNanoKVM(device, password: password, model: model)
+            return
+        }
         do {
             let conn = try await ConnectionResolver.connect(to: device, password: password)
             connection = conn
@@ -90,14 +110,39 @@ final class DeviceSession {
         }
     }
 
+    private func connectNanoKVM(_ device: Device, password: String, model: AppModel) async {
+        do {
+            let conn = try await NanoKVMConnectionResolver.connect(to: device, password: password)
+            nanoConnection = conn
+            var learned = device
+            learned.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA)
+            if learned.certificateTrust != device.certificateTrust || learned.pinnedCertificateSHA256 != device.pinnedCertificateSHA256 {
+                model.update(deviceID) { $0.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA) }
+            }
+            status = .connected(endpointLabel: conn.endpoint.label, host: conn.endpoint.host)
+            nanoInfo = try? await conn.client.info()
+            await refreshAll()
+            startPolling()
+        } catch {
+            status = .failed(error.localizedDescription)
+        }
+    }
+
     func disconnect() {
         eventTask?.cancel()
         eventTask = nil
         connection = nil
+        nanoConnection = nil
+        nanoInfo = nil
         status = .idle
     }
 
     func refreshAll() async {
+        if nanoClient != nil {
+            await refreshNanoATX()
+            await refreshMSD()
+            return
+        }
         await refreshATX()
         await refreshHID()
         await refreshSwitch()
@@ -105,7 +150,50 @@ final class DeviceSession {
     }
 
     func refreshMSD() async {
+        if let nanoClient {
+            msd = await Self.nanoMSD(nanoClient)
+            return
+        }
         msd = try? await client?.msd()
+    }
+
+    nonisolated private static func nanoMSD(_ client: NanoKVMClient) async -> MSDState? {
+        guard let files = try? await client.images() else { return nil }
+        let mounted = try? await client.mountedImage()
+        var cdrom = mounted?.cdrom ?? false
+        if mounted?.cdrom == nil, client.family == .nanoKVM, mounted?.file.isEmpty == false {
+            cdrom = (try? await client.cdromMode()) ?? false
+        }
+        return MSDState(nanoKVMImages: files, mounted: mounted, cdrom: cdrom)
+    }
+
+    /// NanoKVM: the LEDs, shown as ATX state. Devices without an ATX board
+    /// (NanoKVM Lite, NanoKVM Go) fail to read them and show no power controls.
+    private func refreshNanoATX() async {
+        guard let nanoClient else { return }
+        if let leds = try? await nanoClient.leds() {
+            atx = ATXState(nanoKVM: leds, busy: powerPressing)
+        } else {
+            atx = nil
+        }
+    }
+
+    /// True while a NanoKVM power or reset button press is being held.
+    private var powerPressing = false
+
+    /// NanoKVM has no event socket for state, so poll the LEDs and media.
+    private func startPolling() {
+        eventTask?.cancel()
+        eventTask = Task { [weak self] in
+            var tick = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard let self, self.nanoClient != nil else { return }
+                await self.refreshNanoATX()
+                tick += 1
+                if tick % 5 == 0 { await self.refreshMSD() }
+            }
+        }
     }
 
     private func refreshATX() async {
@@ -153,6 +241,7 @@ final class DeviceSession {
 
     /// Makes `target` the active machine (switch port) and applies its saved mouse mode.
     func activate(_ target: Target) async throws {
+        // A NanoKVM has one machine and picks the mouse per report.
         guard let client else { return }
         if let port = target.switchPort, switchState?.activePort != port {
             switchingTo = target.id
@@ -182,6 +271,10 @@ final class DeviceSession {
     }
 
     func power(_ action: ATXPowerAction, for target: Target) async throws {
+        if nanoClient != nil {
+            try await pressNano(action.nanoKVMPress(powerIsOn: atx?.leds.power))
+            return
+        }
         guard let client else { return }
         if let port = target.switchPort {
             try await client.switchATXPower(port: port, action)
@@ -191,12 +284,35 @@ final class DeviceSession {
     }
 
     func click(_ button: ATXButton, for target: Target) async throws {
+        if nanoClient != nil {
+            try await pressNano(button.nanoKVMPress)
+            return
+        }
         guard let client else { return }
         if let port = target.switchPort {
             try await client.switchATXClick(port: port, button)
         } else {
             try await client.atxClick(button)
         }
+    }
+
+    private func pressNano(_ press: ATXPowerAction.NanoKVMPress) async throws {
+        guard let nanoClient, press != .none, !powerPressing else { return }
+        powerPressing = true
+        if let atx { self.atx = ATXState(enabled: atx.enabled, busy: true, power: atx.leds.power, hdd: atx.leds.hdd) }
+        do {
+            switch press {
+            case .none: break
+            case .power(let ms): try await nanoClient.pressPower(milliseconds: ms)
+            case .reset: try await nanoClient.pressReset()
+            }
+        } catch {
+            powerPressing = false
+            await refreshNanoATX()
+            throw error
+        }
+        powerPressing = false
+        await refreshNanoATX()
     }
 
     // MARK: Screen preview
@@ -209,12 +325,19 @@ final class DeviceSession {
 
     /// Takes a fresh picture of the machine's screen.
     func refreshPreview(for target: Target) async {
-        guard let client, isOnScreen(target), !previewsLoading.contains(target.id) else { return }
+        guard isConnected, isOnScreen(target), !previewsLoading.contains(target.id) else { return }
         previewsLoading.insert(target.id)
         defer { previewsLoading.remove(target.id) }
         do {
-            let data = try await client.snapshot()
-            guard let image = NSImage(data: data) else { throw KVMDError.api("The PiKVM returned a picture this Mac can't read.") }
+            let data: Data
+            if let nanoClient {
+                data = try await nanoClient.snapshot()
+            } else if let client {
+                data = try await client.snapshot()
+            } else {
+                return
+            }
+            guard let image = NSImage(data: data) else { throw KVMDError.api("The device returned a picture this Mac can't read.") }
             previews[target.id] = ScreenPreview(image: image, date: Date(), error: nil)
         } catch is CancellationError {
         } catch {
@@ -228,6 +351,11 @@ final class DeviceSession {
 
     /// Selects `image` for the virtual drive and plugs it into the remote machine.
     func mountMedia(image: String, cdrom: Bool, writable: Bool) async throws {
+        if let nanoClient {
+            try await nanoClient.mountImage(image, cdrom: cdrom)
+            await refreshMSD()
+            return
+        }
         guard let client else { return }
         if msd?.drive?.connected == true {
             try await client.msdSetConnected(false)
@@ -239,12 +367,22 @@ final class DeviceSession {
 
     /// Unplugs the virtual drive from the remote machine.
     func ejectMedia() async throws {
+        if let nanoClient {
+            try await nanoClient.mountImage("", cdrom: false)
+            await refreshMSD()
+            return
+        }
         guard let client else { return }
         try await client.msdSetConnected(false)
         await refreshMSD()
     }
 
     func removeImage(_ name: String) async throws {
+        if let nanoClient {
+            try await nanoClient.deleteImage(name)
+            await refreshMSD()
+            return
+        }
         guard let client else { return }
         try await client.msdRemove(image: name)
         await refreshMSD()

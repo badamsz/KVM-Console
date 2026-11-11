@@ -134,6 +134,17 @@ public final class MJPEGStreamer: NSObject, URLSessionDataDelegate, @unchecked S
         self.onEnd = onEnd
     }
 
+    /// Streams from any authenticated MJPEG request, e.g. a NanoKVM's
+    /// `/api/stream/mjpeg` (see `NanoKVMClient.mjpegRequest()`).
+    public init(request: URLRequest, trust: TrustPolicy, onFrame: @escaping FrameHandler, onEnd: @escaping EndHandler) {
+        var req = request
+        req.timeoutInterval = Self.idleTimeout
+        self.request = req
+        self.trust = CertificatePinningDelegate(policy: trust)
+        self.onFrame = onFrame
+        self.onEnd = onEnd
+    }
+
     public func start() {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil

@@ -1,12 +1,31 @@
 import Foundation
 
-/// The PiKVM hardware model. Used for display and for feature hints only;
-/// the authoritative capabilities come from `/api/info` and friends.
+/// The kind of software a device runs, which decides the API the app speaks.
+public enum DeviceFamily: String, Codable, CaseIterable, Sendable {
+    /// PiKVM OS (kvmd). See https://docs.pikvm.org/api/
+    case pikvm
+    /// Sipeed NanoKVM (Cube, Lite, PCIe): the NanoKVM server, HTTP by default.
+    case nanoKVM
+    /// Sipeed NanoKVM Pro and NanoKVM Go: the NanoKVM Pro server, HTTPS by default.
+    case nanoKVMPro
+
+    public var isSipeed: Bool { self != .pikvm }
+}
+
+/// The device's hardware model. It picks the API (`family`) and is used for
+/// display and feature hints; the authoritative capabilities come from the
+/// device itself.
 public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
     case v3
     case v4Mini
     case v4Plus
     case other
+    /// Sipeed NanoKVM Cube, Lite or PCIe.
+    case nanoKVM
+    /// Sipeed NanoKVM Pro (Desk or ATX).
+    case nanoKVMPro
+    /// Sipeed NanoKVM Go.
+    case nanoKVMGo
 
     public var id: String { rawValue }
 
@@ -15,7 +34,27 @@ public enum PiKVMModel: String, Codable, CaseIterable, Sendable, Identifiable {
         case .v3: return "PiKVM V3"
         case .v4Mini: return "PiKVM V4 Mini"
         case .v4Plus: return "PiKVM V4 Plus"
-        case .other: return "Other / DIY"
+        case .other: return "Other PiKVM / DIY"
+        case .nanoKVM: return "Sipeed NanoKVM"
+        case .nanoKVMPro: return "Sipeed NanoKVM Pro"
+        case .nanoKVMGo: return "Sipeed NanoKVM Go"
+        }
+    }
+
+    public var family: DeviceFamily {
+        switch self {
+        case .v3, .v4Mini, .v4Plus, .other: return .pikvm
+        case .nanoKVM: return .nanoKVM
+        case .nanoKVMPro, .nanoKVMGo: return .nanoKVMPro
+        }
+    }
+
+    /// What the device calls itself in messages ("the PiKVM", "the NanoKVM").
+    public var shortName: String {
+        switch family {
+        case .pikvm: return "PiKVM"
+        case .nanoKVM: return "NanoKVM"
+        case .nanoKVMPro: return self == .nanoKVMGo ? "NanoKVM Go" : "NanoKVM Pro"
         }
     }
 
@@ -85,6 +124,17 @@ public struct Endpoint: Codable, Hashable, Identifiable, Sendable {
         guard !trimmed.isEmpty else { return nil }
         if trimmed.contains("://") { return URL(string: trimmed) }
         return URL(string: "https://\(trimmed)")
+    }
+
+    /// Whether the address names its own scheme (`http://...` or `https://...`).
+    public var hasExplicitScheme: Bool { host.contains("://") }
+
+    /// The address over plain HTTP, for devices that don't use TLS by default
+    /// (a NanoKVM ships with HTTPS off). Nil when the address names a scheme.
+    public var plainHTTPURL: URL? {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !hasExplicitScheme else { return nil }
+        return URL(string: "http://\(trimmed)")
     }
 }
 
@@ -162,6 +212,8 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
     }
 
     public var hasSwitch: Bool { targets.contains { $0.switchPort != nil } }
+
+    public var family: DeviceFamily { model.family }
 
     /// Reconciles the target list with the switch ports reported by kvmd,
     /// keeping existing per-port settings (name, mouse mode) where the port
