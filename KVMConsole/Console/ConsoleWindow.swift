@@ -139,6 +139,21 @@ private struct ConsoleContent: View {
                     .help("Video mode")
                 }
 
+                if let side = model.sdCardSide {
+                    Menu {
+                        Picker("MicroSD Card", selection: Binding(get: { side }, set: { model.local?.setSDCard($0) })) {
+                            Text("Connected to \(model.target?.name ?? "the Machine")").tag(CH9329.SDCardSide.target)
+                            Text("Connected to This Mac").tag(CH9329.SDCardSide.host)
+                        }
+                        .pickerStyle(.inline)
+                        Divider()
+                        Text("Eject the card on the side that has it before switching.")
+                    } label: {
+                        Label("MicroSD Card", systemImage: "sdcard")
+                    }
+                    .help(side == .target ? "The microSD card is connected to the machine" : "The microSD card is connected to this Mac")
+                }
+
                 if model.audioAvailable {
                     Menu {
                         Toggle("Mute", isOn: Binding(get: { model.muted }, set: { model.muted = $0 }))

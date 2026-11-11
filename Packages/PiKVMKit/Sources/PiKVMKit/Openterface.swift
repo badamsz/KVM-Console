@@ -6,8 +6,12 @@ import Foundation
 // * a UVC capture device (MacroSilicon MS2109 / MS2109S / MS2130S) carrying
 //   the target's HDMI video, plus a USB audio input with its sound;
 // * a serial port (a WCH CH340 bridge to a CH9329 HID emulator on the
-//   Mini-KVM, or a CH32V208 on newer units) that turns commands into USB
-//   keyboard and mouse reports on the target.
+//   original Mini-KVM, or a CH32V208 on newer Mini-KVMs and the KVM-GO) that
+//   turns commands into USB keyboard and mouse reports on the target.
+//
+// The KVM-GO (USB 2.0 and USB 3.0 versions) pairs an MS2130S capture chip
+// with a CH32V208, which also switches the unit's microSD card between the
+// target and this Mac.
 //
 // The serial protocol is WCH's published CH9329 command protocol. This file
 // is written from that protocol, not from Openterface's own (AGPL) code.
@@ -91,6 +95,15 @@ public enum OpenterfaceHardware {
         return pa == pb
     }
 
+    /// Whether two USB devices sit on the same hub ports, ignoring the bus.
+    /// A USB 3 hub (as in the KVM-GO USB 3.0) shows up twice, once on the
+    /// SuperSpeed bus and once on the USB 2 bus, so its fast capture chip and
+    /// its USB 2 serial controller have the same port path on different buses.
+    public static func sharePortPath(_ a: UInt32, _ b: UInt32) -> Bool {
+        guard let pa = parentLocation(of: a), let pb = parentLocation(of: b) else { return false }
+        return pa & 0x00FF_FFFF == pb & 0x00FF_FFFF && pa & 0x00FF_FFFF != 0
+    }
+
     /// The location as it appears inside a Core Audio device UID, such as
     /// `AppleUSBAudioEngine:…:14210000:3`.
     public static func audioLocationTag(_ location: UInt32) -> String {
@@ -123,6 +136,29 @@ public enum CH9329 {
         case getConfig = 0x08
         case setConfig = 0x09
         case reset = 0x0F
+        /// CH32V208 only (KVM-GO): which side the microSD card is connected to.
+        case sdCard = 0x17
+    }
+
+    /// Which machine a KVM-GO's microSD card is connected to.
+    public enum SDCardSide: UInt8, Sendable {
+        /// This Mac (the Openterface's host side).
+        case host = 0x00
+        /// The machine being controlled.
+        case target = 0x01
+
+        /// Reads the answer to `sdCard`, which the unit also sends by itself
+        /// when its button switches the card.
+        public init?(_ response: Response) {
+            guard !response.isError, response.answers == Command.sdCard.rawValue,
+                  let byte = response.payload.first else { return nil }
+            self.init(rawValue: byte)
+        }
+    }
+
+    /// Switches the microSD card to `side`, or asks where it is when nil.
+    public static func sdCard(_ side: SDCardSide?) -> Data {
+        frame(.sdCard, [0, 0, 0, 0, side?.rawValue ?? 0x03])
     }
 
     /// Serial speeds the chip is found at: 115200 (Openterface's default) or

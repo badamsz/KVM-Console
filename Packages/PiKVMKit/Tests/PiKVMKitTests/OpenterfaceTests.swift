@@ -36,6 +36,22 @@ final class OpenterfaceTests: XCTestCase {
         XCTAssertTrue(OpenterfaceHardware.shareHub(0x1421_0000, 0x1422_0000))
         XCTAssertFalse(OpenterfaceHardware.shareHub(0x1421_0000, 0x1432_0000))
         XCTAssertEqual(OpenterfaceHardware.audioLocationTag(0x1421_0000), "14210000")
+        // A USB 3 hub: capture chip on the SuperSpeed bus, serial on the USB 2 bus.
+        XCTAssertTrue(OpenterfaceHardware.sharePortPath(0x0111_0000, 0x0012_0000))
+        XCTAssertFalse(OpenterfaceHardware.sharePortPath(0x0111_0000, 0x0022_0000))
+        XCTAssertFalse(OpenterfaceHardware.shareHub(0x0111_0000, 0x0012_0000))
+        // Two devices plugged straight into different buses aren't paired.
+        XCTAssertFalse(OpenterfaceHardware.sharePortPath(0x0110_0000, 0x0020_0000))
+    }
+
+    func testSDCard() throws {
+        XCTAssertEqual([UInt8](CH9329.sdCard(.target)), [0x57, 0xAB, 0x00, 0x17, 0x05, 0, 0, 0, 0, 0x01, 0x1F])
+        XCTAssertEqual([UInt8](CH9329.sdCard(nil)), [0x57, 0xAB, 0x00, 0x17, 0x05, 0, 0, 0, 0, 0x03, 0x21])
+        var parser = CH9329.Parser()
+        let answer: [UInt8] = [0x57, 0xAB, 0x00, 0x97, 0x01, 0x00]
+        let response = try XCTUnwrap(parser.feed(Data(answer + [CH9329.checksum(answer)])).first)
+        XCTAssertEqual(CH9329.SDCardSide(response), .host)
+        XCTAssertNil(CH9329.Info(response))
     }
 
     func testFrames() {

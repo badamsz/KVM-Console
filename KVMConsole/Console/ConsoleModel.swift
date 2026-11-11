@@ -135,6 +135,8 @@ final class ConsoleModel {
     var nano: NanoKVMConsoleLink?
     /// Set while showing an Openterface plugged into this Mac. See `ConsoleModel+Openterface.swift`.
     var local: OpenterfaceConsoleLink?
+    /// Where a KVM-GO's microSD card is connected; nil when there's no card switch.
+    var sdCardSide: CH9329.SDCardSide?
 
     init(selection: TargetSelection, app: AppModel) {
         self.selection = selection
@@ -178,6 +180,7 @@ final class ConsoleModel {
         nano = nil
         local?.stop()
         local = nil
+        sdCardSide = nil
         pingTask?.cancel()
         pingTask = nil
         streamer?.stop()
