@@ -3,6 +3,7 @@ import SwiftUI
 
 struct DeviceListView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         @Bindable var model = model
@@ -23,13 +24,14 @@ struct DeviceListView: View {
                 }
             }
         }
-        // Double-clicking (or pressing Return on) a machine behind a Switch makes its port active.
+        // Double-clicking (or pressing Return on) a machine behind an inactive Switch
+        // port makes that port active; otherwise it opens the console.
         .contextMenu(forSelectionType: TargetSelection.self) { items in
             if let item = items.first, let device = model.device(item.deviceID) {
                 TargetMenu(device: device, targetID: item.targetID)
             }
         } primaryAction: { items in
-            if let item = items.first { model.switchPort(to: item) }
+            if let item = items.first, !model.switchPort(to: item) { openWindow(value: item) }
         }
         .overlay {
             if model.devices.isEmpty {
@@ -126,7 +128,7 @@ private struct TargetRow: View {
                     .frame(width: 8, height: 8).help(leds.power ? "Powered on" : "Powered off")
             }
         }
-        .help(target.switchPort == nil ? "" : "Double-click to switch to this port")
+        .help(session.isOnScreen(target) ? "Double-click to open the console" : "Double-click to switch to this port")
         .task { await session.connectIfNeeded() }
     }
 }
