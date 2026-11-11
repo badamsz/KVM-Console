@@ -57,8 +57,9 @@ enum OpenterfaceScanner {
             var serial: SerialPort?
             if let location {
                 serial = serials.first { $0.location.map { OpenterfaceHardware.shareHub($0, location) } ?? false }
-                    // A USB 3 unit (KVM-GO USB 3.0) has its serial port on the hub's USB 2 half.
-                    ?? serials.first { $0.location.map { OpenterfaceHardware.sharePortPath($0, location) } ?? false }
+                    // A KVM-GO's capture chip runs at USB 3 speed, so it sits on the
+                    // SuperSpeed side of the port while the serial controller is on the USB 2 side.
+                    ?? serials.first { $0.location.map { OpenterfaceHardware.sharePhysicalPort(video: location, serial: $0) } ?? false }
             }
             // One of each: they belong together even without matching locations.
             if serial == nil, videos.count == 1, serials.count == 1 { serial = serials[0] }

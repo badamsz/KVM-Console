@@ -36,12 +36,19 @@ final class OpenterfaceTests: XCTestCase {
         XCTAssertTrue(OpenterfaceHardware.shareHub(0x1421_0000, 0x1422_0000))
         XCTAssertFalse(OpenterfaceHardware.shareHub(0x1421_0000, 0x1432_0000))
         XCTAssertEqual(OpenterfaceHardware.audioLocationTag(0x1421_0000), "14210000")
-        // A USB 3 hub: capture chip on the SuperSpeed bus, serial on the USB 2 bus.
-        XCTAssertTrue(OpenterfaceHardware.sharePortPath(0x0111_0000, 0x0012_0000))
-        XCTAssertFalse(OpenterfaceHardware.sharePortPath(0x0111_0000, 0x0022_0000))
-        XCTAssertFalse(OpenterfaceHardware.shareHub(0x0111_0000, 0x0012_0000))
-        // Two devices plugged straight into different buses aren't paired.
-        XCTAssertFalse(OpenterfaceHardware.sharePortPath(0x0110_0000, 0x0020_0000))
+        // KVM-GO behind a hub on Apple silicon, as seen on real hardware:
+        // video on the SuperSpeed side, serial behind the unit's USB 2 hub.
+        XCTAssertEqual(OpenterfaceHardware.portPath(0x0314_2000), [1, 4, 2])
+        XCTAssertTrue(OpenterfaceHardware.sharePhysicalPort(video: 0x0324_0000, serial: 0x0314_2000))
+        XCTAssertFalse(OpenterfaceHardware.sharePhysicalPort(video: 0x0324_0000, serial: 0x0315_2000))
+        XCTAssertFalse(OpenterfaceHardware.sharePhysicalPort(video: 0x0324_0000, serial: 0x0214_2000))
+        // KVM-GO straight into the Mac's port.
+        XCTAssertTrue(OpenterfaceHardware.sharePhysicalPort(video: 0x0320_0000, serial: 0x0312_0000))
+        // Both halves of a USB 3 hub inside the unit.
+        XCTAssertTrue(OpenterfaceHardware.sharePhysicalPort(video: 0x0324_1000, serial: 0x0314_2000))
+        XCTAssertFalse(OpenterfaceHardware.sharePhysicalPort(video: 0x0324_1000, serial: 0x0315_2000))
+        // Unrelated devices on two root ports aren't paired.
+        XCTAssertFalse(OpenterfaceHardware.sharePhysicalPort(video: 0x0320_0000, serial: 0x0310_0000))
     }
 
     func testSDCard() throws {

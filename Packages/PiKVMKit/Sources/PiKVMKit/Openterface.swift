@@ -95,13 +95,37 @@ public enum OpenterfaceHardware {
         return pa == pb
     }
 
-    /// Whether two USB devices sit on the same hub ports, ignoring the bus.
-    /// A USB 3 hub (as in the KVM-GO USB 3.0) shows up twice, once on the
-    /// SuperSpeed bus and once on the USB 2 bus, so its fast capture chip and
-    /// its USB 2 serial controller have the same port path on different buses.
-    public static func sharePortPath(_ a: UInt32, _ b: UInt32) -> Bool {
-        guard let pa = parentLocation(of: a), let pb = parentLocation(of: b) else { return false }
-        return pa & 0x00FF_FFFF == pb & 0x00FF_FFFF && pa & 0x00FF_FFFF != 0
+    /// The hub ports on the way to a device, after the bus byte.
+    static func portPath(_ location: UInt32) -> [UInt8] {
+        var path: [UInt8] = []
+        for shift in stride(from: 20, through: 0, by: -4) {
+            let port = UInt8((location >> UInt32(shift)) & 0xF)
+            if port == 0 { break }
+            path.append(port)
+        }
+        return path
+    }
+
+    /// Whether a capture chip and a serial controller come through the same
+    /// physical USB port when one of them runs at USB 3 speed. A USB-C port
+    /// shows up as two root ports on one bus, a SuperSpeed one and a USB 2
+    /// one (on Apple silicon, `…2…` and `…1…`), and a USB 3 hub likewise
+    /// shows up once on each. So the paths match once the root port is left
+    /// out.
+    ///
+    /// * KVM-GO: the MS2130S is on the port's SuperSpeed lanes (`0x03240000`)
+    ///   while the CH32V208 is behind a USB 2 hub on the same port
+    ///   (`0x03142000`, hub `0x03140000`).
+    /// * A unit with a USB 3 hub inside: both are on that hub, on its two halves.
+    public static func sharePhysicalPort(video: UInt32, serial: UInt32) -> Bool {
+        guard video >> 24 == serial >> 24 else { return false }
+        let v = portPath(video).dropFirst(), s = portPath(serial).dropFirst()
+        guard !portPath(video).isEmpty, !s.isEmpty else { return false }
+        // The serial controller's hub sits where the capture chip is.
+        if Array(v) == Array(s.dropLast()) { return true }
+        // Both on the two halves of one USB 3 hub.
+        let vHub = Array(v.dropLast()), sHub = Array(s.dropLast())
+        return !v.isEmpty && !vHub.isEmpty && vHub == sHub
     }
 
     /// The location as it appears inside a Core Audio device UID, such as
