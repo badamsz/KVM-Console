@@ -58,6 +58,7 @@ struct VirtualMediaView: View {
             }
             Divider()
             HStack {
+                HelpButton(topic: "virtual-media")
                 if let free = session.msd?.freeBytes {
                     Text("\(size(free)) free on the \(deviceName)").foregroundStyle(.secondary).font(.callout)
                 }

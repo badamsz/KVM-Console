@@ -75,6 +75,10 @@ Without the secrets, tagged builds still publish, unsigned. To sign and notarize
 - `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), the NanoKVM client (`NanoKVMClient.swift`), Keychain and JSON storage, and network discovery (`Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API).
 - `KVMConsole`: the SwiftUI app.
 
+## Help
+
+**Help > KVM Console Help** (⌘?) opens a help window with topics on adding and finding devices, the console, mouse modes, virtual media, power control, the PiKVM Switch, NanoKVM, Openterface, configuring and updating a PiKVM, certificates (including your own CA), shortcuts and troubleshooting. Typing in the Help menu's search field lists matching topics too, and sheets such as the device editor and virtual media have a **?** button that opens the relevant topic. The text lives in `KVMConsole/Help/HelpTopics.swift`; update it along with this README when features change.
+
 ## Finding devices on the network
 
 **File → Find Devices on Network…** (⇧⌘F, or the antenna button in the sidebar) lists the KVMs it can find, and **Add…** opens the device editor with the name, model and addresses filled in. Devices you already have are marked Added.

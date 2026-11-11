@@ -25,6 +25,12 @@ struct KVMConsoleApp: App {
         Settings {
             SettingsView()
         }
+
+        Window("KVM Console Help", id: HelpCenter.windowID) {
+            HelpView()
+        }
+        .defaultSize(width: 920, height: 640)
+        .commandsRemoved()
     }
 }
 
@@ -55,6 +61,20 @@ struct AppCommands: Commands {
         CommandGroup(after: .toolbar) {
             Toggle("Hide Toolbar in Full Screen", isOn: $hideToolbarInFullScreen)
                 .keyboardShortcut("t", modifiers: [.command, .control])
+        }
+        // Replaces the default item, which would say help isn't available. The
+        // Help menu's search field also finds help topics (HelpMenuSearch).
+        CommandGroup(replacing: .help) {
+            Button("KVM Console Help") { HelpCenter.shared.show(using: openWindow) }
+                .keyboardShortcut("?", modifiers: .command)
+            Button("Keyboard Shortcuts") { HelpCenter.shared.show("shortcuts", using: openWindow) }
+            Button("Troubleshooting") { HelpCenter.shared.show("troubleshooting", using: openWindow) }
+            Divider()
+            Link("PiKVM Documentation", destination: URL(string: "https://docs.pikvm.org")!)
+            Link("Sipeed NanoKVM Wiki", destination: URL(string: "https://wiki.sipeed.com/hardware/en/kvm/")!)
+            Link("Openterface Website", destination: URL(string: "https://openterface.com")!)
+            Divider()
+            Link("KVM Console on GitHub", destination: URL(string: "https://github.com/badamsz/PiKVM-Console")!)
         }
         CommandGroup(after: .newItem) {
             Button("Add Device…") { model.editorRequest = .new }
@@ -87,8 +107,13 @@ struct ContentView: View {
                 TargetDetailView(device: device, target: target)
                     .id(target.id)
             } else {
-                ContentUnavailableView("No Machine Selected", systemImage: "desktopcomputer",
-                                       description: Text("Add a PiKVM, then pick a machine in the sidebar."))
+                ContentUnavailableView {
+                    Label("No Machine Selected", systemImage: "desktopcomputer")
+                } description: {
+                    Text("Add a KVM, then pick a machine in the sidebar.")
+                } actions: {
+                    Button("Getting Started") { HelpCenter.shared.show("getting-started", using: openWindow) }
+                }
             }
         }
         .sheet(item: $model.editorRequest) { request in
@@ -108,7 +133,10 @@ struct ContentView: View {
         .alert("Error", isPresented: .constant(model.lastError != nil), presenting: model.lastError) { _ in
             Button("OK") { model.lastError = nil }
         } message: { Text($0) }
-        .onAppear { model.installStatusItem(openWindow: openWindow, visible: showMenuBarExtra) }
+        .onAppear {
+            model.installStatusItem(openWindow: openWindow, visible: showMenuBarExtra)
+            HelpCenter.shared.install(openWindow: openWindow)
+        }
         .onChange(of: showMenuBarExtra) { _, visible in model.statusItem?.setVisible(visible) }
     }
 }

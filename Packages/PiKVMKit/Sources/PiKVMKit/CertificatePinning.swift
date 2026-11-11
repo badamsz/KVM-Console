@@ -106,7 +106,7 @@ public final class CertificatePinningDelegate: NSObject, URLSessionDelegate, @un
         case .reject:
             _rejection = policy.requireCertificateAuthority
                 ? "\(host) presented a certificate this Mac doesn't trust. This device uses a certificate authority, so check that its certificate has been renewed and that your CA's root certificate is trusted in Keychain Access."
-                : "\(host) presented a different certificate from the one saved for this device. If you replaced it on purpose, edit the device and save it to accept the new one."
+                : "\(host) presented a different certificate from the one saved for this device. If you replaced it on purpose, edit the device, press Forget Certificate and save to accept the new one."
         }
         lock.unlock()
         switch decision {

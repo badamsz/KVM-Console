@@ -19,6 +19,7 @@ struct DiscoveryView: View {
             }
             Divider()
             HStack {
+                HelpButton(topic: "finding-devices")
                 Spacer()
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
