@@ -88,7 +88,9 @@ public enum Discovery {
         async let https = PortCheck.isOpen(host: ip, port: 443)
         async let http = PortCheck.isOpen(host: ip, port: 80)
         let (httpsOpen, httpOpen) = await (https, http)
-        let open = (httpsOpen ? [443] : []) + (httpOpen ? [80] : [])
+        var open: [Int] = []
+        if httpsOpen { open.append(443) }
+        if httpOpen { open.append(80) }
         guard !open.isEmpty, !Task.isCancelled,
               let match = await prober.probe(host: ip, ports: open) else { return nil }
         let name = await reverseName(ip) ?? ip
