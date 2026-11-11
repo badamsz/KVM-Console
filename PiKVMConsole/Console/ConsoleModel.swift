@@ -141,6 +141,10 @@ final class ConsoleModel {
 
     var device: Device? { app?.device(selection.deviceID) }
     var target: Target? { device?.targets.first { $0.id == selection.targetID } }
+
+    /// Whether the user can pick between H.264 and MJPEG. Sipeed devices
+    /// offer only one: MJPEG on the NanoKVM and Pro, H.264 on the Go.
+    var canChooseVideoMode: Bool { !(device?.family.isSipeed ?? false) }
     var mouseMode: MouseMode { target?.mouseMode ?? .absolute }
 
     // MARK: Lifecycle
