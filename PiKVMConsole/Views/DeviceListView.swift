@@ -92,6 +92,7 @@ private struct DeviceMenu: View {
         Button("Edit…") { model.editorRequest = .edit(device.id) }
         Button("Reconnect") { Task { await model.session(for: device.id).connect() } }
         if device.family == .pikvm {
+            Button("Configure PiKVM…") { model.configRequest = ConfigRequest(deviceID: device.id) }
             Button("Update PiKVM OS…") { model.updateRequest = UpdateRequest(deviceID: device.id) }
         }
         Divider()

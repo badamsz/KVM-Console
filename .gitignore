@@ -12,3 +12,5 @@ Package.resolved
 # macOS
 .DS_Store
 Config/Local.xcconfig
+# Python
+__pycache__/

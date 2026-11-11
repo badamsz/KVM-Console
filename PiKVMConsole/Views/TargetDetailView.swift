@@ -122,6 +122,10 @@ struct TargetDetailView: View {
             Button { Task { await session.connect() } } label: { Label("Reconnect", systemImage: "arrow.clockwise") }
             Button { model.editorRequest = .edit(device.id) } label: { Label("Edit Device", systemImage: "slider.horizontal.3") }
             if device.family == .pikvm {
+                Button { model.configRequest = ConfigRequest(deviceID: device.id) } label: {
+                    Label("Configure PiKVM", systemImage: "gearshape")
+                }
+                .help("View and change this PiKVM's settings (override.yaml)")
                 Button { model.updateRequest = UpdateRequest(deviceID: device.id) } label: {
                     Label("Update PiKVM OS", systemImage: "arrow.down.circle")
                 }
