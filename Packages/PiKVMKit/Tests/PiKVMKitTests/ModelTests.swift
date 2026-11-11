@@ -40,6 +40,26 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(device.targets[0].mouseMode, .relative)
     }
 
+    func testRenamingDeviceWithoutSwitchRenamesItsMachine() {
+        var device = Device(name: "kvm-da21")
+        let id = device.targets[0].id
+        device.name = "NanoKVM Pro"
+        XCTAssertEqual(device.targets.map(\.name), ["NanoKVM Pro"])
+        XCTAssertEqual(device.targets[0].id, id)
+
+        // A target saved with an old name is fixed on the next sync.
+        device.targets[0].name = "stale"
+        device.syncTargets(withSwitchPorts: [])
+        XCTAssertEqual(device.targets[0].name, "NanoKVM Pro")
+    }
+
+    func testRenamingDeviceWithSwitchKeepsPortNames() {
+        var device = Device(name: "Rack", model: .v4Plus)
+        device.syncTargets(withSwitchPorts: (0..<2).map { SwitchPortInfo(index: $0) })
+        device.name = "Rack 2"
+        XCTAssertEqual(device.targets.map(\.name), ["Port 1", "Port 2"])
+    }
+
     func testLegacyModelValuesStillDecode() throws {
         let decode = { (raw: String) in try JSONDecoder().decode(PiKVMModel.self, from: Data("\"\(raw)\"".utf8)) }
         XCTAssertEqual(try decode("v3Lite"), .v4Mini)

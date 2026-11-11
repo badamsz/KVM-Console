@@ -116,9 +116,7 @@ struct DeviceEditorView: View {
                 ?? Endpoint(label: "Tailscale", host: ts))
         }
         d.endpoints = endpoints
-        if d.targets.count == 1, d.targets[0].switchPort == nil, d.targets[0].name.isEmpty || d.targets[0].name == device.name {
-            d.targets[0].name = d.name
-        }
+        // Setting the name above also renames a single machine (`Device.name`).
         return d
     }
 
