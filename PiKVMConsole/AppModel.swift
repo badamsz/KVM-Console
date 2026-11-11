@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 import PiKVMKit
 
 struct TargetSelection: Hashable, Codable {
