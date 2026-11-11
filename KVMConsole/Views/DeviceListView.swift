@@ -134,11 +134,14 @@ private struct TargetRow: View {
     var body: some View {
         let session = model.session(for: device.id)
         let leds = session.leds(for: target)
+        // Behind chained Switches, say which Switch and port this is ("Switch 2, port 3").
+        let ports = session.switchState?.ports ?? []
+        let caption = subtitle ?? target.switchPort.flatMap { p in ports.first { $0.index == p }?.location(inChainOf: ports) }
         HStack(spacing: 8) {
             Image(systemName: "desktopcomputer")
             VStack(alignment: .leading) {
                 Text(target.name)
-                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+                if let caption { Text(caption).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
             if session.switchingTo == target.id {

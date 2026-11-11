@@ -171,4 +171,5 @@ Requires the web terminal (`kvmd-webterm`), which PiKVM OS enables by default.
 - Editing a device's addresses forgets what it learned about the certificate.
 - If 2FA is on, append the current TOTP code to the password.
 - Relative mouse mode needs kvmd's alternate mouse enabled. Without it, `usb_rel` isn't offered.
+- A PiKVM Switch has 4 ports and up to 5 can be chained (20 machines); every port is listed in the sidebar, and with a chain each shows which Switch and port it is on.
 - Machines behind a PiKVM Switch use the switch's ATX endpoints (`/api/switch/atx/*`). A Switch port's page can also blink that port's light on the Switch, to find it on the hardware. Double-click a machine behind a Switch in the sidebar (or select it and press Return) to make its port active; its right-click menu has the same action. Double-clicking a machine that is already on screen (an active port, or a PiKVM without a Switch) opens its console.

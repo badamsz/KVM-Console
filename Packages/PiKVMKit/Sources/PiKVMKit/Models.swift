@@ -150,7 +150,7 @@ public struct Endpoint: Codable, Hashable, Identifiable, Sendable {
 }
 
 /// A machine controlled through a PiKVM. A PiKVM without a Switch has a single
-/// target; with a PiKVM Switch (and chained expansion units) there is one
+/// target; with a PiKVM Switch (up to 5 chained, 20 ports) there is one
 /// target per switch port. Settings such as mouse mode are stored per target.
 public struct Target: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
