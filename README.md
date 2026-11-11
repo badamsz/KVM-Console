@@ -93,10 +93,15 @@ What works:
 - Console with MJPEG video, keyboard, and absolute or relative mouse (saved per machine, like on a PiKVM). The NanoKVM takes standard USB HID reports over its `/api/ws` socket. Keyboard input needs NanoKVM 2.3.2 or newer.
 - Paste as typing, through the NanoKVM's paste API. It always types with a US layout.
 - ATX power on NanoKVMs with the ATX board: power and disk lights, Power On and Shut Down (a short press of the power button, only when the light says it's needed), Force Off (an 8-second press) and Reset. Models without ATX show no power controls.
-- Virtual media: mount an image already stored on the device as a CD/DVD or a flash drive, eject it, or delete it. On a classic NanoKVM, Eject goes back to sharing its data partition.
+- Virtual media (**Manage Images…**):
+  - Mount an image as a CD/DVD or a flash drive, and eject it. On a classic NanoKVM, Eject goes back to sharing its data partition, and an image is always read-only. On the Pro and Go, a flash drive can be made writable.
+  - Delete images.
+  - **Upload Image…** copies an .iso or .img from the Mac, with progress and Cancel. A cancelled upload is removed. The Pro and Go take 8 MiB chunks. A classic NanoKVM needs firmware 2.5.3 or newer, and it may ask you to eject the drive on the remote machine and turn off its Virtual Disk switch first.
+  - **Download from URL…** makes the device download an image from the internet itself. It keeps going if you close the window, and the classic NanoKVM can cancel it.
+  - A classic NanoKVM on 2.5.3+ also reports image sizes, free space, and which images can be a CD/DVD.
 - Screen preview.
 
-Not yet: H.264 video and audio (they use NanoKVM's own WebRTC signalling), uploading images from the Mac (copy them with the device's web page, or `scp` to `/data`), microphone and camera passthrough.
+Not yet: H.264 video and audio (they use NanoKVM's own WebRTC signalling), and microphone and camera passthrough.
 
 Addresses: a NanoKVM serves plain HTTP unless HTTPS is turned on in its settings, while the Pro and Go use HTTPS with a self-signed certificate. The app tries HTTPS first and falls back to HTTP. After it has seen a certificate for the device it only uses HTTPS. To force one, write the scheme into the address, such as `http://192.168.1.60`. macOS only allows plain HTTP to IP addresses, `.local` and bare host names, and Tailscale `*.ts.net` names. Use HTTPS for any other host name.
 

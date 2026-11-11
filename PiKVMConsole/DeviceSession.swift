@@ -73,7 +73,14 @@ final class DeviceSession {
     /// Which API this device speaks.
     var family: DeviceFamily { model?.device(deviceID)?.family ?? .pikvm }
     /// Whether images can be uploaded from this Mac (kvmd only, for now).
-    var supportsImageUpload: Bool { family == .pikvm }
+    var supportsImageUpload: Bool { family == .pikvm || nanoCanUpload }
+    /// Whether the device can download images from a URL itself (Sipeed only).
+    var supportsURLDownload: Bool { nanoClient != nil }
+    /// Classic NanoKVM firmware before 2.5.3 has no upload API.
+    private var nanoCanUpload = false
+    /// A download the device is making from a URL, while one runs.
+    private(set) var download: NanoKVMDownloadStatus?
+    private var downloadWatch: Task<Void, Never>?
 
     func connectIfNeeded() async {
         switch status {
@@ -123,6 +130,10 @@ final class DeviceSession {
             nanoInfo = try? await conn.client.info()
             await refreshAll()
             startPolling()
+            if let status = try? await conn.client.downloadStatus(), status.inProgress {
+                download = status
+                watchDownload()
+            }
         } catch {
             status = .failed(error.localizedDescription)
         }
@@ -134,6 +145,9 @@ final class DeviceSession {
         connection = nil
         nanoConnection = nil
         nanoInfo = nil
+        downloadWatch?.cancel()
+        downloadWatch = nil
+        download = nil
         status = .idle
     }
 
@@ -149,22 +163,32 @@ final class DeviceSession {
         await refreshMSD()
     }
 
-    func refreshMSD() async {
+    /// - Parameter includeFreeSpace: NanoKVM only; left out by background polling.
+    func refreshMSD(includeFreeSpace: Bool = true) async {
         if let nanoClient {
-            msd = await Self.nanoMSD(nanoClient)
+            // Without a fresh reading, keep showing the last free space.
+            let previous: (total: Int64?, free: Int64?)? = includeFreeSpace ? nil : (msd?.totalBytes, msd?.freeBytes)
+            let result = await Self.nanoMSD(nanoClient, includeFreeSpace: includeFreeSpace, previousSpace: previous)
+            msd = result?.state
+            nanoCanUpload = result?.canUpload ?? false
             return
         }
         msd = try? await client?.msd()
     }
 
-    nonisolated private static func nanoMSD(_ client: NanoKVMClient) async -> MSDState? {
-        guard let files = try? await client.images() else { return nil }
+    nonisolated private static func nanoMSD(_ client: NanoKVMClient, includeFreeSpace: Bool,
+                                            previousSpace: (total: Int64?, free: Int64?)?) async -> (state: MSDState, canUpload: Bool)? {
+        guard var library = try? await client.library(includeFreeSpace: includeFreeSpace) else { return nil }
+        if let previousSpace, library.canUpload {
+            library.totalBytes = previousSpace.total
+            library.freeBytes = previousSpace.free
+        }
         let mounted = try? await client.mountedImage()
         var cdrom = mounted?.cdrom ?? false
         if mounted?.cdrom == nil, client.family == .nanoKVM, mounted?.file.isEmpty == false {
             cdrom = (try? await client.cdromMode()) ?? false
         }
-        return MSDState(nanoKVMImages: files, mounted: mounted, cdrom: cdrom)
+        return (MSDState(nanoKVM: library, mounted: mounted, cdrom: cdrom), library.canUpload)
     }
 
     /// NanoKVM: the LEDs, shown as ATX state. Devices without an ATX board
@@ -191,7 +215,7 @@ final class DeviceSession {
                 guard let self, self.nanoClient != nil else { return }
                 await self.refreshNanoATX()
                 tick += 1
-                if tick % 5 == 0 { await self.refreshMSD() }
+                if tick % 5 == 0 { await self.refreshMSD(includeFreeSpace: false) }
             }
         }
     }
@@ -352,7 +376,7 @@ final class DeviceSession {
     /// Selects `image` for the virtual drive and plugs it into the remote machine.
     func mountMedia(image: String, cdrom: Bool, writable: Bool) async throws {
         if let nanoClient {
-            try await nanoClient.mountImage(image, cdrom: cdrom)
+            try await nanoClient.mountImage(image, cdrom: cdrom, writable: writable)
             await refreshMSD()
             return
         }
@@ -390,18 +414,23 @@ final class DeviceSession {
 
     /// Uploads a local ISO or disk image to the PiKVM. Progress is in `upload`.
     func startUpload(fileURL: URL) {
-        guard upload == nil, let client else { return }
+        guard upload == nil, client != nil || nanoClient != nil else { return }
         let name = MSDImageName.sanitized(fileURL.lastPathComponent)
         // Files picked in an open panel need this in the sandbox.
         let scoped = fileURL.startAccessingSecurityScopedResource()
         let size = Int64((try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        let deviceName = model?.device(deviceID)?.model.shortName ?? "PiKVM"
+        // A NanoKVM names images by their path in /data.
+        let storedName = nanoClient == nil ? name : NanoKVMClient.imageDirectory + "/" + name
 
         var problem: String?
-        if msd?.images.contains(where: { $0.name == name }) == true {
-            problem = "The PiKVM already has an image named \(name). Delete it first, or rename the file."
+        if nanoClient != nil, !NanoKVMClient.isImageName(name) {
+            problem = "The \(deviceName) only uses .iso and .img files. Rename \(name) if it is a disk image."
+        } else if msd?.images.contains(where: { $0.name.lowercased() == storedName.lowercased() }) == true {
+            problem = "The \(deviceName) already has an image named \(name). Delete it first, or rename the file."
         } else if let free = msd?.freeBytes, size > free {
             let f = ByteCountFormatter()
-            problem = "\(name) is \(f.string(fromByteCount: size)), but the PiKVM has only \(f.string(fromByteCount: free)) free."
+            problem = "\(name) is \(f.string(fromByteCount: size)), but the \(deviceName) has only \(f.string(fromByteCount: free)) free."
         }
         if let problem {
             if scoped { fileURL.stopAccessingSecurityScopedResource() }
@@ -419,14 +448,23 @@ final class DeviceSession {
                 session.upload = MediaUpload(name: name, sent: sent, total: total)
             }
         }
+        let client = self.client
+        let nanoClient = self.nanoClient
         uploadTask = Task { [weak self] in
             do {
-                try await client.msdUpload(fileURL: fileURL, as: name, progress: report)
+                if let nanoClient {
+                    try await nanoClient.uploadImage(fileURL: fileURL, as: name, progress: report)
+                } else if let client {
+                    try await client.msdUpload(fileURL: fileURL, as: name, progress: report)
+                }
             } catch {
                 let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
                 if !cancelled {
                     self?.mediaError = "Uploading \(name) failed: \(error.localizedDescription)"
                 }
+                // A NanoKVM keeps what arrived; remove the partial image (the
+                // name was checked to be free before starting).
+                if let nanoClient { try? await nanoClient.deleteImage(storedName) }
             }
             if scoped { fileURL.stopAccessingSecurityScopedResource() }
             self?.upload = nil
@@ -437,6 +475,52 @@ final class DeviceSession {
 
     func cancelUpload() {
         uploadTask?.cancel()
+    }
+
+    // MARK: Download from a URL (Sipeed)
+
+    /// Asks the device to download an image from `url`. Progress is in `download`.
+    func startDownload(url: URL) async throws {
+        guard let nanoClient, download?.inProgress != true else { return }
+        let name = url.lastPathComponent
+        if !NanoKVMClient.isImageName(name) {
+            throw KVMDError.api("The address must end in an .iso or .img file name, such as …/ubuntu-24.04-desktop-amd64.iso.")
+        }
+        if msd?.images.contains(where: { ($0.name as NSString).lastPathComponent.lowercased() == name.lowercased() }) == true {
+            throw KVMDError.api("The device already has an image named \(name). Delete it first.")
+        }
+        try await nanoClient.startDownload(url: url)
+        download = try? await nanoClient.downloadStatus()
+        watchDownload()
+    }
+
+    func cancelDownload() async throws {
+        try await nanoClient?.cancelDownload()
+        download = try? await nanoClient?.downloadStatus()
+    }
+
+    /// Follows the device's download until it finishes, then refreshes the list.
+    private func watchDownload() {
+        downloadWatch?.cancel()
+        downloadWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                guard let self, let nanoClient = self.nanoClient else { return }
+                guard let status = try? await nanoClient.downloadStatus() else { continue }
+                if status.inProgress {
+                    self.download = status
+                    continue
+                }
+                self.download = nil
+                switch status.status {
+                case "failed": self.mediaError = "The download failed. Check that the device can reach the address."
+                case "checksum_failed": self.mediaError = "The downloaded image didn't match its checksum and was removed."
+                default: break
+                }
+                await self.refreshMSD()
+                return
+            }
+        }
     }
 
     /// Power/HDD LEDs for a target: from the switch for switch ports,

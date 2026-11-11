@@ -65,6 +65,14 @@ public struct NanoKVMMountedImage: Decodable, Sendable, Hashable {
     public let file: String
     /// Pro only; the classic NanoKVM reports it at `/api/storage/cdrom`.
     public let cdrom: Bool?
+    /// Pro only: whether the remote machine may not write to the image.
+    public let readOnly: Bool?
+
+    public init(file: String, cdrom: Bool? = nil, readOnly: Bool? = nil) {
+        self.file = file
+        self.cdrom = cdrom
+        self.readOnly = readOnly
+    }
 }
 
 public final class NanoKVMClient: @unchecked Sendable {
@@ -72,7 +80,7 @@ public final class NanoKVMClient: @unchecked Sendable {
     public let family: DeviceFamily
     private let username: String
     private let password: String
-    private let session: URLSession
+    let session: URLSession
     public let trustPolicy: TrustPolicy
     public let trustDelegate: CertificatePinningDelegate
 
@@ -144,8 +152,8 @@ public final class NanoKVMClient: @unchecked Sendable {
         return req
     }
 
-    private func jsonRequest(_ path: String, method: String, body: [String: Any]?) throws -> URLRequest {
-        var req = try makeRequest(path, method: method)
+    private func jsonRequest(_ path: String, method: String, query: [String: String], body: [String: Any]?) throws -> URLRequest {
+        var req = try makeRequest(path, method: method, query: query)
         if let body {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -155,10 +163,10 @@ public final class NanoKVMClient: @unchecked Sendable {
 
     /// Sends a request and decodes `data`. On a 401 it logs in again once,
     /// since tokens expire.
-    func call<T: Decodable>(_ type: T.Type, _ path: String, method: String = "GET",
+    func call<T: Decodable>(_ type: T.Type, _ path: String, method: String = "GET", query: [String: String] = [:],
                             body: [String: Any]? = nil, timeout: TimeInterval? = nil) async throws -> T? {
         for attempt in 0..<2 {
-            var req = try jsonRequest(path, method: method, body: body)
+            var req = try jsonRequest(path, method: method, query: query, body: body)
             if let timeout { req.timeoutInterval = timeout }
             let (data, response) = try await session.data(for: req)
             if let http = response as? HTTPURLResponse, http.statusCode == 401, attempt == 0 {
@@ -287,9 +295,12 @@ public final class NanoKVMClient: @unchecked Sendable {
     /// Presents `file` (a path from `images()`) to the remote machine. An
     /// empty `file` ejects the image (a classic NanoKVM then goes back to
     /// sharing its data partition).
-    public func mountImage(_ file: String, cdrom: Bool) async throws {
-        _ = try await call(NanoKVMIgnored.self, "api/storage/image/mount", method: "POST",
-                           body: ["file": file, "cdrom": cdrom], timeout: 60)
+    /// - Parameter writable: NanoKVM Pro only; a classic NanoKVM always
+    ///   serves an image read-only.
+    public func mountImage(_ file: String, cdrom: Bool, writable: Bool = false) async throws {
+        var body: [String: Any] = ["file": file, "cdrom": cdrom]
+        if family == .nanoKVMPro { body["readOnly"] = cdrom || !writable }
+        _ = try await call(NanoKVMIgnored.self, "api/storage/image/mount", method: "POST", body: body, timeout: 60)
     }
 
     public func deleteImage(_ file: String) async throws {

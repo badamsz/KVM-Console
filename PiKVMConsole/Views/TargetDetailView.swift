@@ -85,7 +85,7 @@ struct TargetDetailView: View {
                 Section("Virtual Media") {
                     LabeledContent("Drive") {
                         if msd.drive?.connected == true, let image = msd.drive?.image {
-                            Text("\(image.name) connected")
+                            Text("\((image.name as NSString).lastPathComponent) connected")
                         } else {
                             Text("Nothing connected").foregroundStyle(.secondary)
                         }
