@@ -124,18 +124,20 @@ private struct ConsoleContent: View {
                     .help("Power controls for this machine")
                 }
 
-                Menu {
-                    Picker("Video", selection: Binding(get: { model.videoMode }, set: { model.setVideoMode($0) })) {
-                        ForEach(VideoMode.allCases) { Text($0.displayName).tag($0) }
+                if model.canChooseVideoMode {
+                    Menu {
+                        Picker("Video", selection: Binding(get: { model.videoMode }, set: { model.setVideoMode($0) })) {
+                            ForEach(VideoMode.allCases) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.inline)
+                        if let reason = model.fallbackReason {
+                            Text("Using MJPEG: \(reason)")
+                        }
+                    } label: {
+                        Label("Video", systemImage: "play.rectangle")
                     }
-                    .pickerStyle(.inline)
-                    if let reason = model.fallbackReason {
-                        Text("Using MJPEG: \(reason)")
-                    }
-                } label: {
-                    Label("Video", systemImage: "play.rectangle")
+                    .help("Video mode")
                 }
-                .help("Video mode")
 
                 if model.audioAvailable {
                     Menu {
