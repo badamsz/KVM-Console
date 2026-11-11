@@ -154,6 +154,12 @@ public final class KVMDClient: Sendable {
         _ = try await send(Empty.self, "api/switch/set_active", method: "POST", query: ["port": String(port)])
     }
 
+    /// Turns a Switch port's beacon light on or off, to find the port on the hardware.
+    public func setSwitchBeacon(port: Int, on: Bool) async throws {
+        _ = try await send(Empty.self, "api/switch/set_beacon", method: "POST",
+                           query: ["port": String(port), "state": on ? "1" : "0"])
+    }
+
     /// ATX power for a machine behind a PiKVM Switch (the switch's own ATX
     /// headers, not the PiKVM's).
     public func switchATXPower(port: Int, _ action: ATXPowerAction) async throws {

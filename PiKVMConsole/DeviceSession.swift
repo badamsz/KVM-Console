@@ -145,6 +145,17 @@ final class DeviceSession {
         try await applyMouseMode(target.mouseMode)
     }
 
+    /// Whether the Switch's beacon light is blinking for a target's port.
+    func beacon(for target: Target) -> Bool? {
+        guard let port = target.switchPort, let beacons = switchState?.beacons, port < beacons.count else { return nil }
+        return beacons[port]
+    }
+
+    func setBeacon(_ on: Bool, for target: Target) async throws {
+        guard let client, let port = target.switchPort else { return }
+        try await client.setSwitchBeacon(port: port, on: on)
+    }
+
     func applyMouseMode(_ mode: MouseMode) async throws {
         guard let client else { return }
         if hid?.activeMouseMode != mode, hid?.supportedMouseModes.contains(mode) ?? true {

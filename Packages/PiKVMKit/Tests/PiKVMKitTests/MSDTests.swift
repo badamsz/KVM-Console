@@ -58,6 +58,13 @@ final class MSDTests: XCTestCase {
         XCTAssertTrue(long.hasSuffix(".iso"))
     }
 
+    func testSwitchBeacons() throws {
+        let response = HTTPURLResponse(url: URL(string: "https://kvm")!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        let json = #"{"ok":true,"result":{"beacons":{"uplinks":[false],"downlinks":[false],"ports":[false,true,false,false]}}}"#
+        let state = try KVMDClient.decode(SwitchState.self, data: Data(json.utf8), response: response)
+        XCTAssertEqual(state.beacons, [false, true, false, false])
+    }
+
     func testPlusInQueryIsEncoded() throws {
         let client = KVMDClient(baseURL: URL(string: "https://kvm")!, username: "admin", password: "x", pinnedSHA256: nil)
         let req = try client.makeRequest("api/msd/remove", method: "POST", query: ["image": "c++ tools.iso"])

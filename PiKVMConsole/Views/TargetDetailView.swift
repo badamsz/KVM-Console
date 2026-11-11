@@ -30,6 +30,13 @@ struct TargetDetailView: View {
                         }
                     }
                 }
+                if let beacon = session.beacon(for: target) {
+                    Toggle("Blink this port's light on the Switch", isOn: Binding(
+                        get: { beacon },
+                        set: { on in run { try await session.setBeacon(on, for: target) } }
+                    ))
+                    .help("Helps find this machine's port and cables on the Switch")
+                }
             }
 
             Section("Console") {
