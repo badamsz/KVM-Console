@@ -17,7 +17,7 @@ extension HelpTopic {
         KVM Console controls computers through a KVM-over-IP device: you see the computer's screen in a window on your Mac, type and use the mouse on it, mount ISO images, and switch it on and off, even when it's sitting in the BIOS or has no operating system yet.
 
         ## Supported devices
-        - **PiKVM** V3, V4 Mini, V4 Plus and DIY builds, including a **PiKVM Switch** (or two chained Switches) with up to 8 machines. See [PiKVM Switch](help:pikvm-switch).
+        - **PiKVM** V3, V4 Mini, V4 Plus and DIY builds, including a **PiKVM Switch** with 4 machines, or up to 5 chained Switches with up to 20. See [PiKVM Switch](help:pikvm-switch).
         - **Sipeed NanoKVM** (Cube, Lite, PCIe), **NanoKVM Pro** and **NanoKVM Go**. See [Sipeed NanoKVM](help:nanokvm).
         - **Openterface** USB KVMs plugged straight into this Mac. See [Openterface](help:openterface).
 
@@ -177,9 +177,12 @@ extension HelpTopic {
 
     static let pikvmSwitch = HelpTopic(
         "pikvm-switch", title: "PiKVM Switch", symbol: "rectangle.connected.to.line.below",
-        keywords: ["switch", "ports", "chained", "multiple machines", "beacon", "blink", "active port", "v4 plus"],
+        keywords: ["switch", "ports", "chained", "chain", "daisy chain", "multiple machines", "beacon", "blink", "active port", "v4 plus"],
         body: """
-        A PiKVM with a PiKVM Switch (or two chained Switches) controls several machines. The app reads the ports from the PiKVM and lists each one as a machine under the device in the sidebar. Port names and per-port settings such as the mouse mode are kept.
+        A PiKVM with a PiKVM Switch controls several machines. Each Switch has 4 ports, and up to 5 Switches can be chained for up to 20 machines. The app reads the ports from the PiKVM and lists each one as a machine under the device in the sidebar. Port names and per-port settings such as the mouse mode are kept.
+
+        ## Chained Switches
+        With more than one Switch, each machine in the sidebar shows which Switch and port it's on, such as "Switch 2, port 3". Adding or removing a Switch in the chain adds or removes its ports in the sidebar the next time the PiKVM reports them. PiKVM supports at most 5 Switches in a chain.
 
         ## Switching ports
         The PiKVM sees one port at a time, the **active** port, marked with a check in the sidebar.

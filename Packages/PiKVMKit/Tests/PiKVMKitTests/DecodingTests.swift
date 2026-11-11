@@ -42,6 +42,22 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(state.powerLEDs?[2], true)
     }
 
+    func testSwitchChainOfFiveUnits() throws {
+        let count = SwitchState.maxPorts
+        let ports = (0..<count).map { i in #"{"unit":\#(i / 4),"channel":\#(i % 4),"id":"\#(i / 4 + 1).\#(i % 4 + 1)"}"# }
+        let json = #"{"ok":true,"result":{"model":{"ports":[\#(ports.joined(separator: ","))]},"summary":{"active_port":19}}}"#
+        let state = try KVMDClient.decode(SwitchState.self, data: Data(json.utf8), response: response(200))
+        XCTAssertEqual(state.ports.count, 20)
+        XCTAssertEqual(state.ports[19].displayID, "5.4")
+        XCTAssertEqual(state.activePort, 19)
+        XCTAssertEqual(state.ports[13].location(inChainOf: state.ports), "Switch 4, port 2")
+    }
+
+    func testSingleSwitchHasNoChainLocation() {
+        let ports = (0..<4).map { SwitchPortInfo(index: $0, unit: 0, channel: $0, displayID: "\($0 + 1)") }
+        XCTAssertNil(ports[2].location(inChainOf: ports))
+    }
+
     func testUnauthorized() {
         XCTAssertThrowsError(try KVMDClient.decode(ATXState.self, data: Data(), response: response(403))) { error in
             guard case KVMDError.unauthorized = error else { return XCTFail("\(error)") }

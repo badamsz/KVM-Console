@@ -100,8 +100,9 @@ public struct HIDState: Decodable, Sendable, Hashable {
 
 // MARK: /api/switch
 
-/// One port across a PiKVM Switch chain (4 ports per unit; a chained second
-/// unit adds ports 4-7). Mirrors `model.ports[]` in kvmd's
+/// One port across a PiKVM Switch chain. Each Switch has 4 ports and up to 5
+/// can be chained, so there are at most 20 ports: unit 0 has ports 0-3, unit 1
+/// ports 4-7, and so on. Mirrors `model.ports[]` in kvmd's
 /// `kvmd/apps/kvmd/switch/state.py`.
 public struct SwitchPortInfo: Sendable, Hashable {
     /// Zero-based virtual port, as used by `/api/switch/set_active?port=`.
@@ -109,8 +110,15 @@ public struct SwitchPortInfo: Sendable, Hashable {
     public let unit: Int?
     public let channel: Int?
     public let name: String?
-    /// kvmd's display id: "1".."4" with one unit, "1.1".."2.4" with a chain.
+    /// kvmd's display id: "1".."4" with one unit, "1.1".."5.4" with a chain.
     public let displayID: String?
+
+    /// Where the port is on the hardware, such as "Switch 2, port 3", when
+    /// more than one Switch is chained.
+    public func location(inChainOf ports: [SwitchPortInfo]) -> String? {
+        guard let unit, let channel, ports.contains(where: { ($0.unit ?? 0) > 0 }) else { return nil }
+        return "Switch \(unit + 1), port \(channel + 1)"
+    }
 
     public init(index: Int, unit: Int? = nil, channel: Int? = nil, name: String? = nil, displayID: String? = nil) {
         self.index = index
@@ -122,6 +130,11 @@ public struct SwitchPortInfo: Sendable, Hashable {
 }
 
 public struct SwitchState: Sendable, Hashable {
+    /// kvmd supports up to 5 chained Switches of 4 ports each.
+    public static let maxChainedUnits = 5
+    public static let portsPerUnit = 4
+    public static let maxPorts = maxChainedUnits * portsPerUnit
+
     public let ports: [SwitchPortInfo]
     public let activePort: Int?
     /// Per-port ATX LEDs, when the switch reports them.
