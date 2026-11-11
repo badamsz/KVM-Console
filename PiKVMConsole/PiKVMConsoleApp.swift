@@ -3,7 +3,6 @@ import SwiftUI
 @main
 struct PiKVMConsoleApp: App {
     @State private var model = AppModel()
-    @AppStorage(AppPreferences.showMenuBarExtraKey) private var showMenuBarExtra = true
 
     var body: some Scene {
         WindowGroup("PiKVM Console", id: "main") {
@@ -22,14 +21,6 @@ struct PiKVMConsoleApp: App {
             }
         }
         .defaultSize(width: 1280, height: 760)
-
-        // Quick access to every machine without opening the main window.
-        MenuBarExtra(isInserted: $showMenuBarExtra) {
-            MenuBarMenu()
-                .environment(model)
-        } label: {
-            Image("MenuBarIcon")
-        }
 
         Settings {
             SettingsView()
@@ -79,6 +70,8 @@ struct AppCommands: Commands {
 
 struct ContentView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+    @AppStorage(AppPreferences.showMenuBarExtraKey) private var showMenuBarExtra = true
 
     var body: some View {
         @Bindable var model = model
@@ -106,5 +99,7 @@ struct ContentView: View {
         .alert("Error", isPresented: .constant(model.lastError != nil), presenting: model.lastError) { _ in
             Button("OK") { model.lastError = nil }
         } message: { Text($0) }
+        .onAppear { model.installStatusItem(openWindow: openWindow, visible: showMenuBarExtra) }
+        .onChange(of: showMenuBarExtra) { _, visible in model.statusItem?.setVisible(visible) }
     }
 }
