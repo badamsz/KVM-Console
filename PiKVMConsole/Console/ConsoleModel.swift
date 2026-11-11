@@ -178,6 +178,15 @@ final class ConsoleModel {
         socket?.cancel(with: .goingAway, reason: nil)
     }
 
+    /// Called when this console's window becomes or stops being the key window.
+    func windowIsKey(_ isKey: Bool) {
+        if isKey {
+            app?.frontConsole = self
+        } else if app?.frontConsole === self {
+            app?.frontConsole = nil
+        }
+    }
+
     func toggleMouseMode() {
         setMouseMode(mouseMode == .relative ? .absolute : .relative)
     }

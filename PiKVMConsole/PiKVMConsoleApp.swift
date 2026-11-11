@@ -41,31 +41,26 @@ struct AppCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
     @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
-    @FocusedValue(\.console) private var console
 
     var body: some Commands {
-        // Acts on the console window in front. Its shortcuts all use Control+Command,
-        // which the console keeps for the Mac instead of sending to the remote machine.
+        // Acts on the console window in front. The buttons look the console up when
+        // they run, so the menu does not depend on (or rebuild with) console state.
+        // The shortcuts all use Control+Command, which the console keeps for the Mac
+        // instead of sending to the remote machine.
         CommandMenu("Console") {
-            Group {
-                Button("Send Ctrl+Alt+Del") { console?.sendCombo(["ControlLeft", "AltLeft", "Delete"]) }
-                    .keyboardShortcut(.delete, modifiers: [.control, .command])
-                Button("Paste Clipboard as Typing") { console?.pasteClipboard() }
-                    .keyboardShortcut("v", modifiers: [.option, .command])
-                Divider()
-                Button(console?.mouseMode == .relative ? "Use Absolute Mouse" : "Use Relative Mouse") {
-                    console?.toggleMouseMode()
-                }
+            Button("Send Ctrl+Alt+Del") { model.frontConsole?.sendCombo(["ControlLeft", "AltLeft", "Delete"]) }
+                .keyboardShortcut(.delete, modifiers: [.control, .command])
+            Button("Paste Clipboard as Typing") { model.frontConsole?.pasteClipboard() }
+                .keyboardShortcut("v", modifiers: [.option, .command])
+            Divider()
+            Button("Switch Mouse Mode") { model.frontConsole?.toggleMouseMode() }
                 .keyboardShortcut("m", modifiers: [.control, .command])
-                Button("Virtual Media…") { console?.showingMedia = true }
-                    .keyboardShortcut("i", modifiers: [.control, .command])
-                Divider()
-                Button("Reconnect Video") { console?.reconnect() }
-                    .keyboardShortcut("r", modifiers: [.control, .command])
-            }
-            .disabled(console == nil)
+            Button("Virtual Media…") { model.frontConsole?.showingMedia = true }
+                .keyboardShortcut("i", modifiers: [.control, .command])
+            Divider()
+            Button("Reconnect Video") { model.frontConsole?.reconnect() }
+                .keyboardShortcut("r", modifiers: [.control, .command])
         }
-
         CommandGroup(after: .toolbar) {
             Toggle("Hide Toolbar in Full Screen", isOn: $hideToolbarInFullScreen)
                 .keyboardShortcut("t", modifiers: [.command, .control])

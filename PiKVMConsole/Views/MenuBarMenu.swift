@@ -143,17 +143,3 @@ struct SettingsView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 }
-
-// MARK: Focused console
-
-/// The console in the frontmost window, for the Console menu's commands.
-struct FocusedConsoleKey: FocusedValueKey {
-    typealias Value = ConsoleModel
-}
-
-extension FocusedValues {
-    var console: ConsoleModel? {
-        get { self[FocusedConsoleKey.self] }
-        set { self[FocusedConsoleKey.self] = newValue }
-    }
-}
