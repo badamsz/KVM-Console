@@ -1,4 +1,4 @@
-// Renders the SVG sources in this folder into PiKVMConsole/Assets.xcassets.
+// Renders the SVG sources in this folder into KVMConsole/Assets.xcassets.
 // Run from the repo root:  node Design/AppIcon/generate.js
 // Needs Node and Playwright with Chromium (npm i -g playwright && npx playwright install chromium).
 const { chromium } = require('playwright');
@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const here = __dirname;
-const catalog = path.join(here, '..', '..', 'PiKVMConsole', 'Assets.xcassets');
+const catalog = path.join(here, '..', '..', 'KVMConsole', 'Assets.xcassets');
 const write = (p, obj) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, JSON.stringify(obj, null, 2) + '\n'); };
 const info = { author: 'xcode', version: 1 };
 

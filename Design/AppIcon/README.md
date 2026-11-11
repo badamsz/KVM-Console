@@ -1,6 +1,6 @@
 # App icon
 
-Original artwork for PiKVM Console: a display with a remote pointer and signal arcs.
+Original artwork for KVM Console: a display with a remote pointer and signal arcs.
 
 | File | Use |
 | --- | --- |
@@ -10,7 +10,7 @@ Original artwork for PiKVM Console: a display with a remote pointer and signal a
 
 The SVGs follow the macOS icon grid: a 1024 canvas with an 824 px rounded body and room for the shadow.
 
-To regenerate `PiKVMConsole/Assets.xcassets` after editing an SVG, run from the repo root:
+To regenerate `KVMConsole/Assets.xcassets` after editing an SVG, run from the repo root:
 
 ```sh
 node Design/AppIcon/generate.js

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# PiKVM Console configuration helper.
+# KVM Console configuration helper.
 #
 # The Mac app sends this script to a PiKVM over the web terminal and runs it
 # as root with one argument: the path of a JSON request. It prints exactly one

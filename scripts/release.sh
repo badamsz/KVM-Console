@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds a Release copy of PiKVM Console into dist/.
+# Builds a Release copy of KVM Console into dist/.
 #
 #   scripts/release.sh             Signed with your development identity. For your own Macs.
 #   scripts/release.sh --notarize  Developer ID signed and notarized by Apple. For sharing.
@@ -22,8 +22,8 @@ case "${1:-}" in
   *) echo "usage: scripts/release.sh [--notarize]" >&2; exit 2 ;;
 esac
 
-SCHEME=PiKVMConsole
-APP_NAME=PiKVMConsole.app
+SCHEME=KVMConsole
+APP_NAME="KVM Console.app"
 BUILD=build/release
 NOTARY_PROFILE="${NOTARY_PROFILE:-pikvm-console}"
 
@@ -48,7 +48,7 @@ mkdir -p "$BUILD" dist
 
 echo "==> Archiving $SCHEME $VERSION"
 xcodebuild archive \
-  -project PiKVMConsole.xcodeproj \
+  -project KVMConsole.xcodeproj \
   -scheme "$SCHEME" \
   -configuration Release \
   -destination 'generic/platform=macOS' \
@@ -87,5 +87,5 @@ ditto -c -k --keepParent "$BUILD/export/$APP_NAME" "$BUILD/notarize.zip"
 xcrun notarytool submit "$BUILD/notarize.zip" --keychain-profile "$NOTARY_PROFILE" --wait
 xcrun stapler staple "$BUILD/export/$APP_NAME"
 
-ditto -c -k --keepParent "$BUILD/export/$APP_NAME" "dist/PiKVMConsole-$VERSION.zip"
-echo "==> Built dist/PiKVMConsole-$VERSION.zip (notarized)"
+ditto -c -k --keepParent "$BUILD/export/$APP_NAME" "dist/KVMConsole-$VERSION.zip"
+echo "==> Built dist/KVMConsole-$VERSION.zip (notarized)"

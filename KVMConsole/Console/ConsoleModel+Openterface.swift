@@ -184,7 +184,7 @@ extension ConsoleModel {
         let gen = generation
         fallbackReason = nil
         guard await OpenterfaceCapture.requestAccess(for: .video) else {
-            state = .failed("PiKVM Console can't see the Openterface's video. Allow camera access in System Settings > Privacy & Security > Camera.")
+            state = .failed("KVM Console can't see the Openterface's video. Allow camera access in System Settings > Privacy & Security > Camera.")
             return false
         }
         var audio = false

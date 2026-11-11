@@ -27,7 +27,7 @@ final class SerialPort: @unchecked Sendable {
     /// example when the device is unplugged). Not called after `close()`.
     var onFailure: (@Sendable (String) -> Void)?
 
-    private let queue = DispatchQueue(label: "PiKVMConsole.SerialPort", qos: .userInteractive)
+    private let queue = DispatchQueue(label: "KVMConsole.SerialPort", qos: .userInteractive)
     private var fd: Int32 = -1
     private var readSource: DispatchSourceRead?
     private let lock = NSLock()
