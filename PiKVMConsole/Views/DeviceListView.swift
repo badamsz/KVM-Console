@@ -38,7 +38,7 @@ struct DeviceListView: View {
                 ContentUnavailableView {
                     Label("No Devices", systemImage: "server.rack")
                 } actions: {
-                    Button("Find Devices on Network…") { model.showingDiscovery = true }
+                    Button("Find Devices…") { model.showingDiscovery = true }
                     Button("Add Device…") { model.editorRequest = .new }
                 }
             }
@@ -47,7 +47,7 @@ struct DeviceListView: View {
             Button { model.showingDiscovery = true } label: {
                 Label("Find Devices", systemImage: "antenna.radiowaves.left.and.right")
             }
-            .help("Find PiKVMs and NanoKVMs on your network")
+            .help("Find PiKVMs and NanoKVMs on your network, and Openterface KVMs plugged into this Mac")
             Button { model.editorRequest = .new } label: { Label("Add Device", systemImage: "plus") }
         }
     }

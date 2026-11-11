@@ -1,3 +1,4 @@
+import AVFoundation
 import PiKVMKit
 import SwiftUI
 
@@ -41,18 +42,22 @@ private struct DiscoveryContent: View {
     @Environment(AppModel.self) private var app
     let discovery: DiscoveryModel
     @Binding var editing: EditorRequest?
+    /// Openterface units plugged into this Mac.
+    @State private var units: [OpenterfaceUnit] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Find Devices").font(.title2.bold())
-                Text("PiKVMs and NanoKVMs on your network and tailnet. Nothing is sent to a device except a request for its login page.")
+                Text("PiKVMs and NanoKVMs on your network and tailnet, and Openterface KVMs plugged into this Mac. Nothing is sent to a network device except a request for its login page.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             .padding([.horizontal, .top])
             .padding(.bottom, 8)
 
             List {
+                LocalUnitsSection(units: units, editing: $editing)
+
                 Section {
                     if discovery.results.devices.isEmpty {
                         EmptyResults(discovery: discovery)
@@ -87,6 +92,52 @@ private struct DiscoveryContent: View {
                 }
             }
             .listStyle(.inset)
+            .task {
+                units = OpenterfaceScanner.scan()
+                for await _ in NotificationCenter.default.notifications(named: AVCaptureDevice.wasConnectedNotification) {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    units = OpenterfaceScanner.scan()
+                }
+            }
+        }
+    }
+}
+
+/// Openterface units plugged into this Mac by USB. Shown only when there are some.
+private struct LocalUnitsSection: View {
+    @Environment(AppModel.self) private var app
+    let units: [OpenterfaceUnit]
+    @Binding var editing: EditorRequest?
+
+    var body: some View {
+        if !units.isEmpty {
+            Section("Plugged into this Mac") {
+                ForEach(units) { unit in
+                    HStack(spacing: 10) {
+                        Image(systemName: "cable.connector")
+                            .font(.title2)
+                            .foregroundStyle(.tint)
+                            .frame(width: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(unit.displayName).fontWeight(.medium)
+                            Text([unit.videoName, unit.serialPath].compactMap { $0 }.joined(separator: "  ·  "))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if app.devices.contains(where: { $0.localDeviceID == unit.id }) {
+                            Label("Added", systemImage: "checkmark.circle.fill")
+                                .labelStyle(.titleAndIcon)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button("Add…") {
+                                editing = .discovered(Device(name: "Openterface", model: .openterface,
+                                                             endpoints: [], username: "", localDeviceID: unit.id))
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
         }
     }
 }

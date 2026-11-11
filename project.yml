@@ -52,8 +52,8 @@ targets:
             ts.net:
               NSIncludesSubdomains: true
               NSExceptionAllowsInsecureHTTPLoads: true
-        NSMicrophoneUsageDescription: PiKVM Console sends your microphone to the remote machine when you turn on Send Microphone in a console.
-        NSCameraUsageDescription: PiKVM Console sends your camera to the remote machine when you turn on Send Camera in a console.
+        NSMicrophoneUsageDescription: PiKVM Console plays the sound from an Openterface plugged into this Mac, and sends your microphone to a PiKVM when you turn on Send Microphone in a console.
+        NSCameraUsageDescription: PiKVM Console shows the video from an Openterface plugged into this Mac, and sends your camera to a PiKVM when you turn on Send Camera in a console.
     entitlements:
       path: PiKVMConsole/PiKVMConsole.entitlements
       properties:
@@ -61,9 +61,12 @@ targets:
         com.apple.security.network.client: true
         # WebRTC receives media on UDP ports it opens itself.
         com.apple.security.network.server: true
-        # Microphone and camera passthrough to the remote machine.
+        # Microphone and camera passthrough to the remote machine, and an
+        # Openterface's video and audio, which arrive as a USB camera and microphone.
         com.apple.security.device.audio-input: true
         com.apple.security.device.camera: true
+        # An Openterface's keyboard and mouse controller is a USB serial port.
+        com.apple.security.device.serial: true
         # Reading ISO and disk images the user picks for upload.
         com.apple.security.files.user-selected.read-only: true
     settings:
