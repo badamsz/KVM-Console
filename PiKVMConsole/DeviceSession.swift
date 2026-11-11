@@ -29,6 +29,8 @@ final class DeviceSession {
     /// The latest screen preview of each machine, by target id.
     private(set) var previews: [UUID: ScreenPreview] = [:]
     private(set) var previewsLoading: Set<UUID> = []
+    /// The machine whose Switch port is being made active, for a spinner in the sidebar.
+    private(set) var switchingTo: UUID?
 
     struct ScreenPreview {
         var image: NSImage?
@@ -153,6 +155,8 @@ final class DeviceSession {
     func activate(_ target: Target) async throws {
         guard let client else { return }
         if let port = target.switchPort, switchState?.activePort != port {
+            switchingTo = target.id
+            defer { if switchingTo == target.id { switchingTo = nil } }
             try await client.setActiveSwitchPort(port)
         }
         try await applyMouseMode(target.mouseMode)
