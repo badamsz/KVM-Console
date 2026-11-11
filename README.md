@@ -40,6 +40,24 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 - `scripts/release.sh` signs with your development identity. Good for your own Macs.
 - `scripts/release.sh --notarize` signs with Developer ID and has Apple notarize it, so it opens on any Mac without a warning. This needs a paid Apple Developer Program membership and notary credentials stored once with `xcrun notarytool store-credentials pikvm-console`; the script's header has the full command.
 
+### Release builds in CI
+
+`.github/workflows/release.yml` builds Release on GitHub's macOS runners.
+
+- Every pull request and push to `main` produces an ad-hoc signed build, attached to the workflow run as an artifact (`.zip`, `.dmg`, checksums). macOS blocks its first launch; use **Open Anyway** in System Settings > Privacy & Security.
+- Pushing a tag such as `v0.2.0` (or running the workflow by hand from the Actions tab) signs with Developer ID and notarizes when the secrets below exist. A tag also publishes a GitHub Release with the files. A tag with a hyphen (`v0.2.0-beta.1`) becomes a pre-release. The version in the tag becomes the app's version.
+
+Without the secrets, tagged builds still publish, unsigned. To sign and notarize, add these under Settings > Secrets and variables > Actions (all need a paid Apple Developer Program membership):
+
+| Secret | What it is |
+| --- | --- |
+| `APPLE_TEAM_ID` | Your 10-character team ID (developer.apple.com > Account > Membership details). |
+| `MACOS_CERTIFICATE_P12_BASE64` | A **Developer ID Application** certificate with its private key. Create it in Xcode > Settings > Accounts > Manage Certificates > + > Developer ID Application, export it from Keychain Access as a `.p12`, then `base64 -i DeveloperID.p12 \| pbcopy`. |
+| `MACOS_CERTIFICATE_PASSWORD` | The password you set when exporting the `.p12`. |
+| `NOTARY_API_KEY_P8_BASE64` | An App Store Connect API key for notarization: App Store Connect > Users and Access > Integrations > Team Keys, role **Developer**. Download the `.p8` (only possible once), then `base64 -i AuthKey_XXXX.p8 \| pbcopy`. |
+| `NOTARY_API_KEY_ID` | That key's Key ID. |
+| `NOTARY_API_ISSUER_ID` | The Issuer ID shown above the keys list. |
+
 ## Layout
 
 - `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), the NanoKVM client (`NanoKVMClient.swift`), Keychain and JSON storage, and network discovery (`Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API).
