@@ -23,6 +23,8 @@ An Openterface Mini-KVM or KVM-GO (USB 2.0 or 3.0; any unit with an MS2109/MS210
 - On a KVM-GO (CH32V208 controller), the console's **MicroSD Card** menu connects the unit's microSD card to the target or to the Mac, and follows the unit's own switch button.
 - A KVM-GO's capture chip runs at USB 3 speed on the port's SuperSpeed side while its serial controller sits behind a USB 2 hub on the same port, so the two are matched by port path with the root port left out.
 
+**File > USB Devices…** (⇧⌘U) shows the units the app recognises, with an **Add…** button, plus every camera, serial port and audio input the Mac reports, the camera and microphone permissions, and a **Copy Details** button for bug reports. A unit appears in the sidebar only after it has been added.
+
 The serial protocol is implemented from WCH's published CH9329 command set rather than from Openterface's own app, which is AGPL-licensed. Quit the Openterface app first; only one app can hold the serial port.
 
 ## Building

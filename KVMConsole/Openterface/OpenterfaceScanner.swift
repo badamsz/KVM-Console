@@ -40,14 +40,67 @@ enum OpenterfaceScanner {
         let chip: String
     }
 
+    /// A serial port of any kind, for the USB Devices window.
+    struct AnySerialPort: Hashable {
+        let path: String
+        let vendor: Int?
+        let product: Int?
+        let location: UInt32?
+        /// "CH9329" or "CH32V208" when it is an Openterface controller.
+        let chip: String?
+    }
+
+    /// A camera or microphone as AVFoundation sees it, for the USB Devices window.
+    struct CaptureDeviceInfo: Hashable {
+        let name: String
+        let uniqueID: String
+        let modelID: String
+        /// For cameras: whether it is an Openterface capture chip.
+        let isOpenterface: Bool
+    }
+
+    /// Everything the scan looks at, for the USB Devices window.
+    struct Report {
+        var units: [OpenterfaceUnit] = []
+        var cameras: [CaptureDeviceInfo] = []
+        var serialPorts: [AnySerialPort] = []
+        var audioInputs: [CaptureDeviceInfo] = []
+        var cameraAccess: AVAuthorizationStatus = .notDetermined
+        var microphoneAccess: AVAuthorizationStatus = .notDetermined
+    }
+
+    private static func videoDevices() -> [AVCaptureDevice] {
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .video, position: .unspecified).devices
+    }
+
+    private static func audioDevices() -> [AVCaptureDevice] {
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified).devices
+    }
+
+    static func report() -> Report {
+        let cameras = videoDevices()
+        let audios = audioDevices()
+        return Report(
+            units: scan(),
+            cameras: cameras.map {
+                CaptureDeviceInfo(name: $0.localizedName, uniqueID: $0.uniqueID, modelID: $0.modelID,
+                                  isOpenterface: OpenterfaceHardware.isVideoCapture(uniqueID: $0.uniqueID, modelID: $0.modelID))
+            },
+            serialPorts: allSerialPorts(),
+            audioInputs: audios.map {
+                CaptureDeviceInfo(name: $0.localizedName, uniqueID: $0.uniqueID, modelID: $0.modelID, isOpenterface: false)
+            },
+            cameraAccess: AVCaptureDevice.authorizationStatus(for: .video),
+            microphoneAccess: AVCaptureDevice.authorizationStatus(for: .audio)
+        )
+    }
+
     static func scan() -> [OpenterfaceUnit] {
-        let videos = AVCaptureDevice.DiscoverySession(deviceTypes: [.external], mediaType: .video, position: .unspecified)
-            .devices
+        let videos = videoDevices()
             .filter { OpenterfaceHardware.isVideoCapture(uniqueID: $0.uniqueID, modelID: $0.modelID) }
         guard !videos.isEmpty else { return [] }
         let serials = serialPorts()
-        let audios = AVCaptureDevice.DiscoverySession(deviceTypes: [.microphone, .external], mediaType: .audio, position: .unspecified)
-            .devices
+        let audios = audioDevices()
 
         return videos.map { video in
             let parsed = OpenterfaceHardware.parseCaptureUniqueID(video.uniqueID)
@@ -99,12 +152,19 @@ enum OpenterfaceScanner {
 
     /// Serial ports whose USB device is an Openterface controller.
     static func serialPorts() -> [SerialPort] {
+        allSerialPorts().compactMap { port in
+            port.chip.map { SerialPort(path: port.path, location: port.location, chip: $0) }
+        }
+    }
+
+    /// Every serial port, with the USB IDs of the device it belongs to.
+    static func allSerialPorts() -> [AnySerialPort] {
         guard let matching = IOServiceMatching("IOSerialBSDClient") else { return [] }
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) == KERN_SUCCESS else { return [] }
         defer { IOObjectRelease(iterator) }
 
-        var ports: [SerialPort] = []
+        var ports: [AnySerialPort] = []
         var service = IOIteratorNext(iterator)
         while service != 0 {
             defer {
@@ -113,12 +173,14 @@ enum OpenterfaceScanner {
             }
             guard let path = IORegistryEntryCreateCFProperty(service, "IOCalloutDevice" as CFString, kCFAllocatorDefault, 0)?
                 .takeRetainedValue() as? String else { continue }
-            guard let vendor = number(service, "idVendor"), let product = number(service, "idProduct"),
-                  let chip = OpenterfaceHardware.controlChips[.init(vendor: UInt16(truncatingIfNeeded: vendor),
-                                                                    product: UInt16(truncatingIfNeeded: product))]
-            else { continue }
+            let vendor = number(service, "idVendor"), product = number(service, "idProduct")
+            var chip: String?
+            if let vendor, let product {
+                chip = OpenterfaceHardware.controlChips[.init(vendor: UInt16(truncatingIfNeeded: vendor),
+                                                              product: UInt16(truncatingIfNeeded: product))]
+            }
             let location = number(service, "locationID").map { UInt32(truncatingIfNeeded: $0) }
-            ports.append(SerialPort(path: path, location: location, chip: chip))
+            ports.append(AnySerialPort(path: path, vendor: vendor, product: product, location: location, chip: chip))
         }
         return ports.sorted { $0.path < $1.path }
     }
