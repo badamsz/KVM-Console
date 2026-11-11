@@ -164,8 +164,8 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(device.username, "admin")
         // Stored bare; the NanoKVM client falls back from HTTPS to HTTP itself.
         XCTAssertEqual(device.endpoints.first?.host, "10.0.0.9")
-        // Uses the NanoKVM model once PiKVMModel has it; falls back to Other until then.
-        XCTAssertEqual(device.model, PiKVMModel(rawValue: "nanoKVM") ?? .other)
+        XCTAssertEqual(device.model, .nanoKVM)
+        XCTAssertEqual(DiscoveredKind.nanoKVM(pro: true).suggestedModel, .nanoKVMPro)
     }
 
     // MARK: Tailscale

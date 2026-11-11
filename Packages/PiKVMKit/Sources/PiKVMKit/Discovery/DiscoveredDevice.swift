@@ -24,14 +24,11 @@ public enum DiscoveredKind: Hashable, Sendable {
 
     public var isPiKVM: Bool { if case .pikvm = self { return true } else { return false } }
 
-    /// The model to prefill when the user adds this device. NanoKVM models are
-    /// looked up by raw value so this keeps compiling whether or not the
-    /// NanoKVM cases exist in `PiKVMModel` yet.
+    /// The model to prefill when the user adds this device.
     public var suggestedModel: PiKVMModel {
         switch self {
         case .pikvm(let model): return model ?? .other
-        case .nanoKVM(let pro):
-            return PiKVMModel(rawValue: pro == true ? "nanoKVMPro" : "nanoKVM") ?? .other
+        case .nanoKVM(let pro): return pro == true ? .nanoKVMPro : .nanoKVM
         }
     }
 }
