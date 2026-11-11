@@ -59,6 +59,8 @@ struct AppCommands: Commands {
         CommandGroup(after: .newItem) {
             Button("Add Device…") { model.editorRequest = .new }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+            Button("Find Devices on Network…") { model.showingDiscovery = true }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             Button("Open Console") {
                 if let selection = model.selection { openWindow(value: selection) }
             }
@@ -91,6 +93,9 @@ struct ContentView: View {
         }
         .sheet(item: $model.editorRequest) { request in
             DeviceEditorView(request: request)
+        }
+        .sheet(isPresented: $model.showingDiscovery) {
+            DiscoveryView()
         }
         .sheet(item: $model.updateRequest) { request in
             DeviceUpdateView(deviceID: request.deviceID)

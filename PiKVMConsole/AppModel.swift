@@ -11,11 +11,14 @@ struct TargetSelection: Hashable, Codable {
 enum EditorRequest: Identifiable {
     case new
     case edit(UUID)
+    /// A new device prefilled from network discovery.
+    case discovered(Device)
 
     var id: String {
         switch self {
         case .new: return "new"
         case .edit(let id): return id.uuidString
+        case .discovered(let device): return "discovered-" + device.id.uuidString
         }
     }
 }
@@ -27,6 +30,8 @@ final class AppModel {
     private(set) var devices: [Device] = []
     var selection: TargetSelection?
     var editorRequest: EditorRequest?
+    /// The Find Devices sheet (network discovery).
+    var showingDiscovery = false
     var updateRequest: UpdateRequest?
     var lastError: String?
     /// The console whose window is in front, for the Console menu. Not observed:

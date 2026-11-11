@@ -14,7 +14,7 @@ struct DeviceEditorView: View {
     @State private var testResult: String?
     @State private var testing = false
 
-    private var isNew: Bool { if case .new = request { return true } else { return false } }
+    private var isNew: Bool { if case .edit = request { return false } else { return true } }
     private var isSipeed: Bool { device.family.isSipeed }
 
     var body: some View {
@@ -87,11 +87,18 @@ struct DeviceEditorView: View {
     }
 
     private func load() {
-        guard case .edit(let id) = request, let existing = model.device(id) else { return }
-        device = existing
-        lanHost = existing.endpoints.first { $0.label == "LAN" }?.host ?? ""
-        tailscaleHost = existing.endpoints.first { $0.label == "Tailscale" }?.host ?? ""
-        hasSavedPassword = model.credentials.password(for: id) != nil
+        switch request {
+        case .new:
+            return
+        case .discovered(let found):
+            device = found
+        case .edit(let id):
+            guard let existing = model.device(id) else { return }
+            device = existing
+            hasSavedPassword = model.credentials.password(for: id) != nil
+        }
+        lanHost = device.endpoints.first { $0.label == "LAN" }?.host ?? ""
+        tailscaleHost = device.endpoints.first { $0.label == "Tailscale" }?.host ?? ""
     }
 
     private func assembled() -> Device {

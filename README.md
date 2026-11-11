@@ -42,8 +42,17 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 
 ## Layout
 
-- `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), the NanoKVM client (`NanoKVMClient.swift`), Keychain and JSON storage.
+- `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), the NanoKVM client (`NanoKVMClient.swift`), Keychain and JSON storage, and network discovery (`Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API).
 - `PiKVMConsole`: the SwiftUI app.
+
+## Finding devices on the network
+
+**File → Find Devices on Network…** (⇧⌘F, or the antenna button in the sidebar) lists the KVMs it can find, and **Add…** opens the device editor with the name, model and addresses filled in. Devices you already have are marked Added.
+
+- **Bonjour** runs while the window is open. PiKVM OS announces `_pikvm._tcp` with its model once Avahi is on: add `ENABLE_AVAHI=1` to `/boot/pikvm.txt` (or run `systemctl enable --now avahi-daemon` after `rw`). NanoKVMs answer Bonjour under their host name and are recognised by their web page.
+- **Network scan** checks every address on the Mac's local networks (narrowed to the /24 around the Mac on bigger networks) for a web server on ports 443 and 80, and recognises kvmd (PiKVM) and NanoKVM by what they return to a visitor who isn't logged in. No passwords are sent. The first time, macOS asks to allow local network access; allow it and scan again.
+- **Tailscale** lists your tailnet's online Linux machines and checks each one the same way. The app is sandboxed and can't talk to the Tailscale app, so it uses the Tailscale API with an access token you create in the admin console (Settings → Keys); the token is stored in the Keychain. A Tailscale machine with the same host name as a LAN find is merged into one entry with both addresses.
+- A NanoKVM found over plain HTTP is guessed to be a classic NanoKVM and one over HTTPS a NanoKVM Pro; change the model in the editor if the guess is wrong.
 
 ## Menu bar and previews
 
