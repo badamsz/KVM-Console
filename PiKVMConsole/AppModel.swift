@@ -50,7 +50,11 @@ final class AppModel {
     init(store: DeviceStore = DeviceStore(fileURL: DeviceStore.defaultURL), credentials: CredentialStore = CredentialStore()) {
         self.store = store
         self.credentials = credentials
-        do { devices = try store.load() } catch { lastError = "Couldn't load devices: \(error.localizedDescription)" }
+        do {
+            devices = try store.load()
+            // Devices renamed before renames reached the machine's name.
+            for i in devices.indices { devices[i].syncSingleTargetName() }
+        } catch { lastError = "Couldn't load devices: \(error.localizedDescription)" }
     }
 
     func device(_ id: UUID) -> Device? { devices.first { $0.id == id } }
@@ -84,13 +88,16 @@ final class AppModel {
     func save(_ device: Device, password: String?) {
         if let i = devices.firstIndex(where: { $0.id == device.id }) {
             var updated = device
+            updated.syncSingleTargetName()
             // Endpoints or kind of device changed: the certificate may legitimately differ.
             if devices[i].endpoints.map(\.host) != device.endpoints.map(\.host) || devices[i].family != device.family {
                 updated.resetCertificateTrust()
             }
             devices[i] = updated
         } else {
-            devices.append(device)
+            var added = device
+            added.syncSingleTargetName()
+            devices.append(added)
         }
         if let password, !password.isEmpty { credentials.setPassword(password, for: device.id) }
         persist()

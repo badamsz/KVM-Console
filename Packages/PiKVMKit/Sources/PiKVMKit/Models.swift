@@ -159,7 +159,11 @@ public struct Target: Codable, Hashable, Identifiable, Sendable {
 /// A configured PiKVM. The password is not stored here; see `CredentialStore`.
 public struct Device: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
-    public var name: String
+    /// Renaming a device without a Switch renames its one machine too, since
+    /// the sidebar and console show the machine's name.
+    public var name: String {
+        didSet { syncSingleTargetName() }
+    }
     public var model: PiKVMModel
     public var endpoints: [Endpoint]
     public var username: String
@@ -213,6 +217,12 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
 
     public var hasSwitch: Bool { targets.contains { $0.switchPort != nil } }
 
+    /// Gives the single machine of a device without a Switch the device's name.
+    public mutating func syncSingleTargetName() {
+        guard !hasSwitch, targets.count == 1, targets[0].name != name else { return }
+        targets[0].name = name
+    }
+
     public var family: DeviceFamily { model.family }
 
     /// Reconciles the target list with the switch ports reported by kvmd,
@@ -224,6 +234,7 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
                 let mode = targets.first?.mouseMode ?? .absolute
                 targets = [Target(name: name, mouseMode: mode)]
             }
+            syncSingleTargetName()
             return
         }
         let existing = Dictionary(
