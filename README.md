@@ -1,6 +1,6 @@
 # PiKVM Console
 
-A native macOS app (macOS 14+) for remote control and management of [PiKVM](https://docs.pikvm.org) devices.
+A native macOS app (macOS 14+) for remote control and management of [PiKVM](https://docs.pikvm.org) devices, and of [Sipeed NanoKVM](https://wiki.sipeed.com/hardware/en/kvm/) devices (NanoKVM, NanoKVM Pro, NanoKVM Go).
 
 ## Status
 
@@ -42,7 +42,7 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 
 ## Layout
 
-- `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), Keychain and JSON storage.
+- `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), the NanoKVM client (`NanoKVMClient.swift`), Keychain and JSON storage.
 - `PiKVMConsole`: the SwiftUI app.
 
 ## Menu bar and previews
@@ -74,6 +74,22 @@ On a PiKVM set up for it, the console's **Microphone and Camera** menu sends thi
 - A flash drive can be made writable. A CD/DVD is always read-only.
 - Uploading, deleting and changing the image all need the drive ejected first; that is a PiKVM rule.
 - Each PiKVM has one virtual drive. Behind a Switch it goes to whichever port is active.
+
+## Sipeed NanoKVM, NanoKVM Pro and NanoKVM Go
+
+Add one with **Model** set to Sipeed NanoKVM (Cube, Lite, PCIe), Sipeed NanoKVM Pro or Sipeed NanoKVM Go, and the login you use on its web page (admin / admin until you change it). The model picks the protocol, so get it right: the NanoKVM and the NanoKVM Pro run different server software. The Go runs the Pro's.
+
+What works:
+
+- Console with MJPEG video, keyboard, and absolute or relative mouse (saved per machine, like on a PiKVM). The NanoKVM takes standard USB HID reports over its `/api/ws` socket. Keyboard input needs NanoKVM 2.3.2 or newer.
+- Paste as typing, through the NanoKVM's paste API. It always types with a US layout.
+- ATX power on NanoKVMs with the ATX board: power and disk lights, Power On and Shut Down (a short press of the power button, only when the light says it's needed), Force Off (an 8-second press) and Reset. Models without ATX show no power controls.
+- Virtual media: mount an image already stored on the device as a CD/DVD or a flash drive, eject it, or delete it. On a classic NanoKVM, Eject goes back to sharing its data partition.
+- Screen preview.
+
+Not yet: H.264 video and audio (they use NanoKVM's own WebRTC signalling), uploading images from the Mac (copy them with the device's web page, or `scp` to `/data`), microphone and camera passthrough.
+
+Addresses: a NanoKVM serves plain HTTP unless HTTPS is turned on in its settings, while the Pro and Go use HTTPS with a self-signed certificate. The app tries HTTPS first and falls back to HTTP. After it has seen a certificate for the device it only uses HTTPS. To force one, write the scheme into the address, such as `http://192.168.1.60`. macOS only allows plain HTTP to IP addresses, `.local` and bare host names, and Tailscale `*.ts.net` names. Use HTTPS for any other host name.
 
 ## Updating a PiKVM
 

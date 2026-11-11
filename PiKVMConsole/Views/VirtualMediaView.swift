@@ -30,7 +30,7 @@ struct VirtualMediaView: View {
             Group {
                 if let msd = session.msd, msd.enabled {
                     form(session, msd)
-                } else if session.client == nil {
+                } else if !session.isConnected {
                     ContentUnavailableView("Not Connected", systemImage: "wifi.slash",
                                            description: Text("Connect to this PiKVM to manage its virtual drive."))
                 } else {
@@ -133,8 +133,10 @@ struct VirtualMediaView: View {
                             .foregroundStyle(selected == image.name ? Color.accentColor : Color.secondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(image.name).lineLimit(1).truncationMode(.middle)
-                            Text(image.complete ? size(image.size) : "\(size(image.size)) · incomplete")
-                                .font(.caption).foregroundStyle(.secondary)
+                            if image.size > 0 || !image.complete {
+                                Text(image.complete ? size(image.size) : "\(size(image.size)) · incomplete")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                         Spacer()
                         if image.removable {
@@ -163,6 +165,9 @@ struct VirtualMediaView: View {
                         Text("\(size(upload.sent)) of \(size(upload.total))")
                             .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
+                } else if !session.supportsImageUpload {
+                    Text("Uploading from this Mac isn't supported for Sipeed devices yet. Copy images to the device with its web page, or with scp to /data.")
+                        .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Button { choosingFile = true } label: { Label("Upload Image…", systemImage: "square.and.arrow.up") }
                         .disabled(connected || locked)

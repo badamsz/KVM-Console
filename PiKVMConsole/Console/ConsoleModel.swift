@@ -59,7 +59,7 @@ final class ConsoleModel {
     }
 
     let selection: TargetSelection
-    private(set) var state: State = .connecting
+    var state: State = .connecting
     /// The latest video frame.
     private(set) var frame: CGImage?
     private(set) var videoSize: CGSize = .zero
@@ -74,9 +74,9 @@ final class ConsoleModel {
     /// The mode the user asked for.
     private(set) var videoMode = ConsolePreferences.videoMode
     /// The mode in use right now; differs from `videoMode` after a fallback.
-    private(set) var activeVideoMode: VideoMode = .mjpeg
+    var activeVideoMode: VideoMode = .mjpeg
     /// Set when H.264 was requested but the console fell back to MJPEG.
-    private(set) var fallbackReason: String?
+    var fallbackReason: String?
     /// The view WebRTC draws into, while H.264 is active.
     private(set) var webRTCView: NSView?
     /// Whether this PiKVM offers audio (only known in H.264 mode).
@@ -105,17 +105,17 @@ final class ConsoleModel {
     }
 
     /// Set while pasted text is being typed.
-    private(set) var pasteProgress: PasteProgress?
+    var pasteProgress: PasteProgress?
     /// Clipboard text waiting for the user to confirm.
     var pendingPaste: String?
     /// How fast pasted text is typed. Shared by all consoles.
     var typingRate = TypingRate(rawValue: UserDefaults.standard.string(forKey: "console.typingRate") ?? "") ?? .normal {
         didSet { UserDefaults.standard.set(typingRate.rawValue, forKey: "console.typingRate") }
     }
-    private var pasteTask: Task<Void, Never>?
+    var pasteTask: Task<Void, Never>?
 
-    private weak var app: AppModel?
-    private var socket: URLSessionWebSocketTask?
+    weak var app: AppModel?
+    var socket: URLSessionWebSocketTask?
     private var streamer: MJPEGStreamer?
     private var webRTC: WebRTCStream?
     private var webRTCUp = false
@@ -126,7 +126,10 @@ final class ConsoleModel {
     private var pingTask: Task<Void, Never>?
     private var frameCount = 0
     private var fpsWindowStart = Date()
-    private var generation = 0
+    var generation = 0
+    /// Set while connected to a Sipeed NanoKVM, which takes standard HID
+    /// reports instead of kvmd's key names. See `ConsoleModel+NanoKVM.swift`.
+    var nano: NanoKVMConsoleLink?
 
     init(selection: TargetSelection, app: AppModel) {
         self.selection = selection
@@ -160,8 +163,10 @@ final class ConsoleModel {
         teardown()
     }
 
-    private func teardown() {
+    func teardown() {
         generation += 1
+        nano?.stop()
+        nano = nil
         pingTask?.cancel()
         pingTask = nil
         streamer?.stop()
@@ -235,6 +240,9 @@ final class ConsoleModel {
         if frame == nil, webRTCView == nil { state = .connecting }
         let session = app.session(for: selection.deviceID)
         await session.connectIfNeeded()
+        if let nanoClient = session.nanoClient {
+            return await runNanoKVMOnce(nanoClient)
+        }
         guard let client = session.client else {
             if case .failed(let message) = session.status { state = .failed(message) }
             return false
@@ -372,12 +380,12 @@ final class ConsoleModel {
         streamer?.start()
     }
 
-    nonisolated private static func decode(_ jpeg: Data) -> CGImage? {
+    nonisolated static func decode(_ jpeg: Data) -> CGImage? {
         guard let source = CGImageSourceCreateWithData(jpeg as CFData, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
     }
 
-    private func receive(_ image: CGImage, generation gen: Int) {
+    func receive(_ image: CGImage, generation gen: Int) {
         guard gen == generation else { return }
         frame = image
         let size = CGSize(width: image.width, height: image.height)
@@ -433,21 +441,25 @@ final class ConsoleModel {
     }
 
     func key(_ code: String, down: Bool) {
+        if let nano { nano.key(code, down: down); return }
         send(HIDMessage.key(code, down: down))
     }
 
     func mouseButton(_ button: MouseButton, down: Bool) {
+        if let nano { nano.mouseButton(button, down: down, mode: mouseMode); return }
         send(HIDMessage.mouseButton(button, down: down))
     }
 
     /// `point` is in video pixels with the origin at the top-left.
     func mouseMove(toVideoPoint point: CGPoint) {
+        if let nano { nano.mouseMove(toVideoPoint: point, videoSize: videoSize); return }
         guard let pos = HIDMessage.absolutePosition(x: point.x, y: point.y,
                                                     videoWidth: videoSize.width, videoHeight: videoSize.height) else { return }
         send(HIDMessage.mouseMove(x: pos.x, y: pos.y))
     }
 
     func mouseRelative(dx: Int, dy: Int) {
+        if let nano { nano.mouseRelative(dx: dx, dy: dy); return }
         let steps = HIDMessage.splitDelta(dx: dx, dy: dy)
         guard !steps.isEmpty else { return }
         send(HIDMessage.mouseRelative(steps, squash: steps.count > 1))
@@ -455,6 +467,7 @@ final class ConsoleModel {
 
     func mouseWheel(dx: Int, dy: Int) {
         guard dx != 0 || dy != 0 else { return }
+        if let nano { nano.mouseWheel(dy: dy, mode: mouseMode); return }
         send(HIDMessage.mouseWheel(dx: dx, dy: dy))
     }
 
@@ -483,6 +496,10 @@ final class ConsoleModel {
     /// Types `text` on the remote machine at the chosen typing rate.
     func typeText(_ text: String) {
         pendingPaste = nil
+        if let app, let nanoClient = app.session(for: selection.deviceID).nanoClient {
+            typeTextOnNanoKVM(text, client: nanoClient)
+            return
+        }
         guard pasteProgress == nil, let app, let client = app.session(for: selection.deviceID).client else { return }
         let chunks = TextPaste.chunks(text)
         let total = text.count

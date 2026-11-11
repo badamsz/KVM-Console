@@ -23,6 +23,8 @@ struct TargetDetailView: View {
             Section("Connection") {
                 LabeledContent("Status") { StatusText(status: session.status) }
                 if let v = session.info?.kvmdVersion { LabeledContent("kvmd", value: v) }
+                if let v = session.nanoInfo?.application, !v.isEmpty { LabeledContent("NanoKVM software", value: v) }
+                if let h = session.nanoInfo?.mdns, !h.isEmpty { LabeledContent("Hostname", value: h) }
                 if let h = session.info?.hostname { LabeledContent("Hostname", value: h) }
                 switch device.certificateTrust {
                 case .certificateAuthority:
@@ -76,7 +78,7 @@ struct TargetDetailView: View {
                     Label("Open Console", systemImage: "display")
                 }
                 .controlSize(.large)
-                .disabled(session.client == nil)
+                .disabled(!session.isConnected)
             }
 
             if let msd = session.msd, msd.enabled {
@@ -119,10 +121,12 @@ struct TargetDetailView: View {
         .toolbar {
             Button { Task { await session.connect() } } label: { Label("Reconnect", systemImage: "arrow.clockwise") }
             Button { model.editorRequest = .edit(device.id) } label: { Label("Edit Device", systemImage: "slider.horizontal.3") }
-            Button { model.updateRequest = UpdateRequest(deviceID: device.id) } label: {
-                Label("Update PiKVM OS", systemImage: "arrow.down.circle")
+            if device.family == .pikvm {
+                Button { model.updateRequest = UpdateRequest(deviceID: device.id) } label: {
+                    Label("Update PiKVM OS", systemImage: "arrow.down.circle")
+                }
+                .help("Run pikvm-update on this PiKVM")
             }
-            .help("Run pikvm-update on this PiKVM")
         }
         .sheet(isPresented: $showingMedia) { VirtualMediaView(deviceID: device.id).environment(model) }
         .confirmationDialog("Force off \(target.name)?", isPresented: $confirmHardOff) {
@@ -196,7 +200,7 @@ private struct ScreenPreviewView: View {
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
-                .disabled(loading || !onScreen || session.client == nil)
+                .disabled(loading || !onScreen || !session.isConnected)
                 .help(onScreen ? "Take a new picture of the screen" : "The PiKVM only sees the active Switch port")
             }
             .font(.callout)

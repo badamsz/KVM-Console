@@ -15,6 +15,7 @@ struct DeviceEditorView: View {
     @State private var testing = false
 
     private var isNew: Bool { if case .new = request { return true } else { return false } }
+    private var isSipeed: Bool { device.family.isSipeed }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,16 +23,24 @@ struct DeviceEditorView: View {
                 Section("Device") {
                     TextField("Name", text: $device.name, prompt: Text("Rack KVM"))
                     Picker("Model", selection: $device.model) {
-                        ForEach(PiKVMModel.allCases) { Text($0.displayName).tag($0) }
+                        Section("PiKVM") {
+                            ForEach(PiKVMModel.allCases.filter { $0.family == .pikvm }) { Text($0.displayName).tag($0) }
+                        }
+                        Section("Sipeed") {
+                            ForEach(PiKVMModel.allCases.filter { $0.family.isSipeed }) { Text($0.displayName).tag($0) }
+                        }
                     }
                 }
                 Section {
-                    TextField("LAN address", text: $lanHost, prompt: Text("192.168.1.50 or pikvm.local"))
-                    TextField("Tailscale address", text: $tailscaleHost, prompt: Text("pikvm.tailnet-name.ts.net"))
+                    TextField("LAN address", text: $lanHost, prompt: Text(isSipeed ? "192.168.1.60 or nanokvm.local" : "192.168.1.50 or pikvm.local"))
+                    TextField("Tailscale address", text: $tailscaleHost, prompt: Text(isSipeed ? "nanokvm.tailnet-name.ts.net" : "pikvm.tailnet-name.ts.net"))
                 } header: {
                     Text("Addresses")
                 } footer: {
-                    Text("The LAN address is tried first, then Tailscale.").foregroundStyle(.secondary)
+                    Text(isSipeed
+                         ? "The LAN address is tried first, then Tailscale. HTTPS is tried before plain HTTP, which a NanoKVM uses unless HTTPS is turned on in its settings."
+                         : "The LAN address is tried first, then Tailscale.")
+                        .foregroundStyle(.secondary)
                 }
                 Section {
                     TextField("Username", text: $device.username)
@@ -40,7 +49,9 @@ struct DeviceEditorView: View {
                 } header: {
                     Text("Login")
                 } footer: {
-                    Text("If two-factor authentication is on, add the current code to the end of the password.")
+                    Text(isSipeed
+                         ? "The NanoKVM web login. The default is admin / admin until you change it."
+                         : "If two-factor authentication is on, add the current code to the end of the password.")
                         .foregroundStyle(.secondary)
                 }
                 if let testResult {
@@ -111,9 +122,17 @@ struct DeviceEditorView: View {
         var probe = assembled()
         probe.resetCertificateTrust()
         do {
-            let conn = try await ConnectionResolver.connect(to: probe, password: pw)
-            let info = try? await conn.client.info()
-            testResult = "Connected via \(conn.endpoint.label)" + (info?.kvmdVersion.map { ", kvmd \($0)" } ?? "") + "."
+            if probe.family.isSipeed {
+                let conn = try await NanoKVMConnectionResolver.connect(to: probe, password: pw)
+                let info = try? await conn.client.info()
+                let scheme = conn.client.baseURL.scheme == "http" ? " over plain HTTP" : ""
+                testResult = "Connected via \(conn.endpoint.label)\(scheme)"
+                    + (info?.application.map { ", NanoKVM \($0)" } ?? "") + "."
+            } else {
+                let conn = try await ConnectionResolver.connect(to: probe, password: pw)
+                let info = try? await conn.client.info()
+                testResult = "Connected via \(conn.endpoint.label)" + (info?.kvmdVersion.map { ", kvmd \($0)" } ?? "") + "."
+            }
         } catch {
             testResult = error.localizedDescription
         }

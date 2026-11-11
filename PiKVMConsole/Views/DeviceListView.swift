@@ -86,7 +86,9 @@ private struct DeviceMenu: View {
     var body: some View {
         Button("Edit…") { model.editorRequest = .edit(device.id) }
         Button("Reconnect") { Task { await model.session(for: device.id).connect() } }
-        Button("Update PiKVM OS…") { model.updateRequest = UpdateRequest(deviceID: device.id) }
+        if device.family == .pikvm {
+            Button("Update PiKVM OS…") { model.updateRequest = UpdateRequest(deviceID: device.id) }
+        }
         Divider()
         Button("Remove", role: .destructive) { model.delete(device.id) }
     }

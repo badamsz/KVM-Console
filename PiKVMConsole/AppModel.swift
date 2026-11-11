@@ -78,8 +78,10 @@ final class AppModel {
     func save(_ device: Device, password: String?) {
         if let i = devices.firstIndex(where: { $0.id == device.id }) {
             var updated = device
-            // Endpoints changed: the certificate may legitimately differ.
-            if devices[i].endpoints.map(\.host) != device.endpoints.map(\.host) { updated.resetCertificateTrust() }
+            // Endpoints or kind of device changed: the certificate may legitimately differ.
+            if devices[i].endpoints.map(\.host) != device.endpoints.map(\.host) || devices[i].family != device.family {
+                updated.resetCertificateTrust()
+            }
             devices[i] = updated
         } else {
             devices.append(device)

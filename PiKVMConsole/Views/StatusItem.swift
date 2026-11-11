@@ -90,7 +90,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             app?.selection = selection
             self?.showMainWindow()
         })
-        if session.client == nil {
+        if !session.isConnected {
             sub.addItem(action("Connect") { Task { await session.connect() } })
         }
         if let leds {
