@@ -23,8 +23,13 @@ struct OpenterfaceUnit: Identifiable, Hashable {
     let audioName: String?
 
     var displayName: String {
-        videoChip.map { "Openterface (\($0))" } ?? "Openterface"
+        let chips = [videoChip, controlChip].compactMap { $0 }
+        return chips.isEmpty ? "Openterface" : "Openterface (\(chips.joined(separator: ", ")))"
     }
+
+    /// Newer units (KVM-GO, recent Mini-KVMs) have a CH32V208 controller,
+    /// which also switches the KVM-GO's microSD card.
+    var hasSDCardSwitch: Bool { controlChip == "CH32V208" }
 }
 
 /// Finds Openterface units by their USB vendor and product IDs.
@@ -52,6 +57,8 @@ enum OpenterfaceScanner {
             var serial: SerialPort?
             if let location {
                 serial = serials.first { $0.location.map { OpenterfaceHardware.shareHub($0, location) } ?? false }
+                    // A USB 3 unit (KVM-GO USB 3.0) has its serial port on the hub's USB 2 half.
+                    ?? serials.first { $0.location.map { OpenterfaceHardware.sharePortPath($0, location) } ?? false }
             }
             // One of each: they belong together even without matching locations.
             if serial == nil, videos.count == 1, serials.count == 1 { serial = serials[0] }

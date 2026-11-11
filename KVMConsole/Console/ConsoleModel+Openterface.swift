@@ -14,6 +14,11 @@ final class OpenterfaceConsoleLink {
     private var parser = CH9329.Parser()
     /// The controller's last answer to `getInfo`.
     private(set) var info: CH9329.Info?
+    /// Where a KVM-GO's microSD card is connected, once the unit has said.
+    private(set) var sdCard: CH9329.SDCardSide?
+    /// Called when the microSD card's side becomes known or changes, including
+    /// when the unit's own button switches it.
+    var onSDCard: ((CH9329.SDCardSide) -> Void)?
     private var keyboard = HIDReport.Keyboard()
     private var buttons: UInt8 = 0
     private var lastPosition: (x: UInt16, y: UInt16) = (2048, 2048)
@@ -29,6 +34,17 @@ final class OpenterfaceConsoleLink {
 
     func start() {
         capture.start()
+    }
+
+    /// Asks where the microSD card is (KVM-GO). The answer arrives through `onSDCard`.
+    func querySDCard() {
+        guard unit.hasSDCardSwitch else { return }
+        serial?.write(CH9329.sdCard(nil))
+    }
+
+    /// Connects the microSD card to the target or to this Mac.
+    func setSDCard(_ side: CH9329.SDCardSide) {
+        serial?.write(CH9329.sdCard(side))
     }
 
     /// Opens the keyboard and mouse controller, finding its serial speed.
@@ -83,7 +99,12 @@ final class OpenterfaceConsoleLink {
 
     private func received(_ data: Data) {
         for response in parser.feed(data) {
-            if let info = CH9329.Info(response) { self.info = info }
+            if let info = CH9329.Info(response) {
+                self.info = info
+            } else if let side = CH9329.SDCardSide(response) {
+                sdCard = side
+                onSDCard?(side)
+            }
         }
     }
 
@@ -209,8 +230,14 @@ extension ConsoleModel {
         if unit.audioID != nil, !audio {
             app?.lastError = "To hear the Openterface's audio, allow microphone access in System Settings > Privacy & Security > Microphone."
         }
+        link.onSDCard = { [weak self] side in
+            guard let self, gen == self.generation else { return }
+            self.sdCardSide = side
+        }
         if let problem = await link.openSerial() {
             app?.lastError = problem
+        } else {
+            link.querySDCard()
         }
 
         let reason = await withTaskCancellationHandler {

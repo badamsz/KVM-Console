@@ -220,9 +220,9 @@ extension HelpTopic {
 
     static let openterface = HelpTopic(
         "openterface", title: "Openterface USB KVMs", symbol: "cable.connector",
-        keywords: ["openterface", "mini-kvm", "usb", "serial", "ch9329", "capture card", "plugged in"],
+        keywords: ["openterface", "mini-kvm", "kvm-go", "usb", "serial", "ch9329", "ch32v208", "capture card", "plugged in", "microsd", "sd card"],
         body: """
-        An Openterface Mini-KVM connects the remote machine straight to this Mac by USB, with no network. Connect its host cable to the Mac, and its target cable and HDMI to the machine you want to control.
+        An Openterface Mini-KVM or KVM-GO (USB 2.0 or USB 3.0) connects the remote machine straight to this Mac by USB, with no network. Connect its host cable to the Mac, and its target cable and HDMI to the machine you want to control.
 
         ## Adding one
         It appears under **Find Devices > Plugged into this Mac**. Or choose **Add Device…**, set the model to *Openterface (USB)* and pick the unit. **Look Again** checks for newly plugged-in units, and **Test Connection** says whether the keyboard and mouse controller and audio were found.
@@ -230,6 +230,7 @@ extension HelpTopic {
         - Video and sound arrive as a USB camera and microphone, so macOS asks for camera and microphone access the first time. If you said no, turn KVM Console on in **System Settings > Privacy & Security > Camera** and **Microphone**.
         - The keyboard and mouse go through the unit's serial controller, with absolute or relative mouse like the other devices.
         - Paste as typing uses a US keyboard layout.
+        - On a KVM-GO, the **MicroSD Card** button in the console's toolbar connects the unit's microSD card to the machine or to this Mac. It also follows the unit's own switch button. Eject the card on the side that has it before switching.
 
         > Quit the Openterface app first: only one app at a time can use the unit's keyboard and mouse controller.
         """)
