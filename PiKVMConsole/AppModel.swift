@@ -31,7 +31,11 @@ final class AppModel {
     /// The console whose window is in front, for the Console menu. Not observed:
     /// the menu reads it when a command runs, so console updates never rebuild the menu.
     @ObservationIgnored weak var frontConsole: ConsoleModel?
-    private(set) var sessions: [UUID: DeviceSession] = [:]
+    /// Not observed: `session(for:)` adds to it while views are being built, and
+    /// each session is observable on its own.
+    @ObservationIgnored private(set) var sessions: [UUID: DeviceSession] = [:]
+    /// The menu bar item. Created once, by the first main window.
+    @ObservationIgnored private(set) var statusItem: StatusItemController?
 
     private let store: DeviceStore
     let credentials: CredentialStore
@@ -43,6 +47,13 @@ final class AppModel {
     }
 
     func device(_ id: UUID) -> Device? { devices.first { $0.id == id } }
+
+    func installStatusItem(openWindow: OpenWindowAction, visible: Bool) {
+        if statusItem == nil {
+            statusItem = StatusItemController(app: self, openWindow: openWindow)
+        }
+        statusItem?.setVisible(visible)
+    }
 
     func session(for deviceID: UUID) -> DeviceSession {
         if let s = sessions[deviceID] { return s }
