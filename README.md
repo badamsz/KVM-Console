@@ -15,11 +15,13 @@ All four planned steps are in. Nothing has been through a wide range of hardware
 
 ## Openterface
 
-An Openterface Mini-KVM (or another unit with an MS2109/MS2130 capture chip and a CH9329 or CH32V208 controller) plugged into the Mac shows up under **Find Devices > Plugged into this Mac**, or add it with **Add Device** and the *Openterface (USB)* model. The app finds its parts by USB vendor and product ID:
+An Openterface Mini-KVM or KVM-GO (USB 2.0 or 3.0; any unit with an MS2109/MS2109S/MS2130S capture chip and a CH9329 or CH32V208 controller) plugged into the Mac shows up under **Find Devices > Plugged into this Mac**, or add it with **Add Device** and the *Openterface (USB)* model. The app finds its parts by USB vendor and product ID:
 
 - **Video and audio** come from the unit's USB camera and microphone through AVFoundation. macOS asks for camera and microphone access the first time.
 - **Keyboard and mouse** go out as CH9329 serial commands (absolute and relative mouse, per machine like the other devices). The controller is tried at 115200 baud, then 9600.
 - Pasting types the text as key presses with a US keyboard layout.
+- On a KVM-GO (CH32V208 controller), the console's **MicroSD Card** menu connects the unit's microSD card to the target or to the Mac, and follows the unit's own switch button.
+- A KVM-GO's capture chip runs at USB 3 speed on the port's SuperSpeed side while its serial controller sits behind a USB 2 hub on the same port, so the two are matched by port path with the root port left out.
 
 The serial protocol is implemented from WCH's published CH9329 command set rather than from Openterface's own app, which is AGPL-licensed. Quit the Openterface app first; only one app can hold the serial port.
 
