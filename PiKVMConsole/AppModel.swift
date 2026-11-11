@@ -33,6 +33,7 @@ final class AppModel {
     /// The Find Devices sheet (network discovery).
     var showingDiscovery = false
     var updateRequest: UpdateRequest?
+    var configRequest: ConfigRequest?
     var lastError: String?
     /// The console whose window is in front, for the Console menu. Not observed:
     /// the menu reads it when a command runs, so console updates never rebuild the menu.

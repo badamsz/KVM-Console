@@ -101,6 +101,10 @@ struct ContentView: View {
             DeviceUpdateView(deviceID: request.deviceID)
                 .interactiveDismissDisabled()
         }
+        .sheet(item: $model.configRequest) { request in
+            DeviceConfigView(deviceID: request.deviceID)
+                .interactiveDismissDisabled()
+        }
         .alert("Error", isPresented: .constant(model.lastError != nil), presenting: model.lastError) { _ in
             Button("OK") { model.lastError = nil }
         } message: { Text($0) }

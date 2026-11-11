@@ -8,7 +8,11 @@ let package = Package(
         .library(name: "PiKVMKit", targets: ["PiKVMKit"]),
     ],
     targets: [
-        .target(name: "PiKVMKit"),
+        .target(
+            name: "PiKVMKit",
+            // Sent to the PiKVM to read and change its configuration.
+            resources: [.copy("Resources/pikvm_config_helper.py")]
+        ),
         .testTarget(name: "PiKVMKitTests", dependencies: ["PiKVMKit"]),
     ]
 )

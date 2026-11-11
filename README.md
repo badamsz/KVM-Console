@@ -19,7 +19,7 @@ xcodegen generate
 open PiKVMConsole.xcodeproj
 ```
 
-Run the library tests without Xcode with `swift test --package-path Packages/PiKVMKit`.
+Run the library tests without Xcode with `swift test --package-path Packages/PiKVMKit`. The on-device configuration helper has its own tests: `python3 -m unittest discover -s Packages/PiKVMKit/Tests/HelperTests` (needs `pip install ruamel.yaml pyyaml`).
 
 ### Signing (stops the repeated Keychain prompt)
 
@@ -99,6 +99,16 @@ What works:
 Not yet: H.264 video and audio (they use NanoKVM's own WebRTC signalling), uploading images from the Mac (copy them with the device's web page, or `scp` to `/data`), microphone and camera passthrough.
 
 Addresses: a NanoKVM serves plain HTTP unless HTTPS is turned on in its settings, while the Pro and Go use HTTPS with a self-signed certificate. The app tries HTTPS first and falls back to HTTP. After it has seen a certificate for the device it only uses HTTPS. To force one, write the scheme into the address, such as `http://192.168.1.60`. macOS only allows plain HTTP to IP addresses, `.local` and bare host names, and Tailscale `*.ts.net` names. Use HTTPS for any other host name.
+
+## Configuring a PiKVM
+
+**Configure PiKVM…** (toolbar gear, or right-click a device) views and changes the PiKVM's settings in `/etc/kvmd/override.yaml`. kvmd's API can't read or change its configuration and the file sits on a read-only filesystem, so, like the updater, this works as root through the PiKVM's web terminal: no SSH needed, but it asks for the root password (shared with the updater and optionally saved in the Keychain).
+
+- **Settings**: switches for the common options: USB audio, webcam, Ethernet, serial and extra drives (`otg.devices.*`, which need a reboot), video quality, frame rate and H.264 bitrate, the mouse jiggler, and turning ATX and the virtual drive on or off. Options the PiKVM's kvmd doesn't know are hidden. The VNC and IPMI services can be turned on and off here too. **Apply…** lists the changes before saving; **Edit in override.yaml** writes them into the file instead so you can review them first.
+- **override.yaml**: the file itself, in a plain editor (no smart quotes). **Check** asks kvmd whether it accepts the file without saving. **Save and Restart…** saves it.
+- **Backups**: every save keeps the previous version in `/etc/kvmd/pikvm-console-backups` (the last 20). Pick one to see it, open it in the editor, or restore it (which backs up the current file first).
+
+Every save goes through the same steps on the device: kvmd validates the new file together with all the other config files (`kvmd -m --override-config`), the filesystem is made writable only while the file is replaced (and set back to read-only), then only the services that read the changed sections restart (kvmd for `kvmd:`, kvmd-vnc for `vnc:` and so on). If a restarted service doesn't stay up, the previous file is put back automatically and the service log is shown. Changes under `otg:` only take effect after a reboot; the app says so and offers **Reboot Now**.
 
 ## Updating a PiKVM
 
