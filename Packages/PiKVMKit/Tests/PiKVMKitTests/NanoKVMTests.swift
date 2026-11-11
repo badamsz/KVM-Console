@@ -193,4 +193,77 @@ final class NanoKVMTests: XCTestCase {
         XCTAssertEqual(ATXPowerAction.resetHard.nanoKVMPress(powerIsOn: nil), .reset)
         XCTAssertEqual(ATXButton.powerLong.nanoKVMPress, .power(milliseconds: 8000))
     }
+
+    // MARK: Media management
+
+    func testLibraryAdapterUsesSizesAndOptical() {
+        var library = NanoKVMLibrary(images: ["/data/win.iso", "/data/disk.img"], canUpload: true)
+        library.sizes = ["/data/win.iso": 5_000_000_000]
+        library.optical = ["/data/win.iso"]
+        library.freeBytes = 1_000
+        let state = MSDState(nanoKVM: library, mounted: NanoKVMMountedImage(file: "/data/disk.img", cdrom: false, readOnly: false), cdrom: false)
+        XCTAssertEqual(state.images.first { $0.name == "/data/win.iso" }?.size, 5_000_000_000)
+        XCTAssertEqual(state.images.first { $0.name == "/data/disk.img" }?.cdromable, false)
+        XCTAssertEqual(state.freeBytes, 1_000)
+        XCTAssertEqual(state.drive?.writable, true)
+    }
+
+    func testImageNames() {
+        XCTAssertTrue(NanoKVMClient.isImageName("Ubuntu.ISO"))
+        XCTAssertTrue(NanoKVMClient.isImageName("disk.img"))
+        XCTAssertFalse(NanoKVMClient.isImageName("disk.qcow2"))
+    }
+
+    func testMediaItemPath() throws {
+        let json = Data(#"{"type":"image","rel":"isos/a.iso","name":"a.iso","size":12,"fs":"iso9660","attached":false}"#.utf8)
+        let item = try JSONDecoder().decode(NanoKVMMediaItem.self, from: json)
+        XCTAssertEqual(item.path, "/data/isos/a.iso")
+        XCTAssertTrue(item.isOptical)
+    }
+
+    func testDownloadStatusFraction() throws {
+        let classic = try JSONDecoder().decode(NanoKVMDownloadStatus.self, from: Data(
+            #"{"status":"in_progress","file":"https://x/a.iso","percentage":"25%","loaded":25,"total":100}"#.utf8))
+        XCTAssertEqual(classic.fraction, 0.25)
+        XCTAssertTrue(classic.inProgress)
+        let pro = try JSONDecoder().decode(NanoKVMDownloadStatus.self, from: Data(
+            #"{"status":"in_progress","file":"https://x/a.iso","percentage":"40.5%"}"#.utf8))
+        XCTAssertEqual(pro.fraction ?? 0, 0.405, accuracy: 0.0001)
+        let idle = try JSONDecoder().decode(NanoKVMDownloadStatus.self, from: Data(#"{"status":"idle","file":"","percentage":""}"#.utf8))
+        XCTAssertNil(idle.fraction)
+        XCTAssertFalse(idle.inProgress)
+    }
+
+    func testChunkMultipartBody() {
+        let body = NanoKVMClient.multipartBody(boundary: "B", fields: [("chunkIndex", "0")],
+                                               fileField: "file", fileName: "a.iso", fileData: Data("XY".utf8))
+        let text = String(decoding: body, as: UTF8.self)
+        XCTAssertEqual(text, "--B\r\nContent-Disposition: form-data; name=\"chunkIndex\"\r\n\r\n0\r\n"
+            + "--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.iso\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+            + "XY\r\n--B--\r\n")
+    }
+
+    func testStreamingMultipartMatchesItsLength() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("nanokvm-\(UUID().uuidString).img")
+        let payload = Data((0..<300_000).map { UInt8($0 % 251) })
+        try payload.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let body = try MultipartFileStream(fileURL: url, fileSize: Int64(payload.count), fieldName: "file",
+                                           fileName: "x.img", boundary: "B")
+        let stream = body.stream
+        stream.open()
+        defer { stream.close() }
+        var received = Data()
+        var buffer = [UInt8](repeating: 0, count: 32 * 1024)
+        while true {
+            let n = stream.read(&buffer, maxLength: buffer.count)
+            if n <= 0 { break }
+            received.append(buffer, count: n)
+        }
+        XCTAssertEqual(Int64(received.count), body.length)
+        let expected = MultipartFileStream.fileHeader(boundary: "B", fieldName: "file", fileName: "x.img")
+            + payload + MultipartFileStream.footer(boundary: "B")
+        XCTAssertEqual(received, expected)
+    }
 }
