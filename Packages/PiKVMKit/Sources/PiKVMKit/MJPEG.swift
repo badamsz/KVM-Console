@@ -129,7 +129,7 @@ public final class MJPEGStreamer: NSObject, URLSessionDataDelegate, @unchecked S
         var req = try client.makeRequest("streamer/stream")
         req.timeoutInterval = Self.idleTimeout
         self.request = req
-        self.trust = CertificatePinningDelegate(pinnedSHA256: client.effectivePinnedSHA256)
+        self.trust = CertificatePinningDelegate(policy: client.effectiveTrustPolicy)
         self.onFrame = onFrame
         self.onEnd = onEnd
     }

@@ -117,6 +117,9 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
     /// SHA-256 fingerprint (hex) of the device's TLS certificate, pinned on
     /// first successful connection. PiKVMs ship with self-signed certificates.
     public var pinnedCertificateSHA256: String?
+    /// How the certificate is checked. Nil until the first successful
+    /// connection decides it.
+    public var certificateTrust: CertificateTrust?
 
     public init(
         id: UUID = UUID(),
@@ -125,7 +128,8 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         endpoints: [Endpoint] = [],
         username: String = "admin",
         targets: [Target]? = nil,
-        pinnedCertificateSHA256: String? = nil
+        pinnedCertificateSHA256: String? = nil,
+        certificateTrust: CertificateTrust? = nil
     ) {
         self.id = id
         self.name = name
@@ -134,6 +138,27 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         self.username = username
         self.targets = targets ?? [Target(name: name)]
         self.pinnedCertificateSHA256 = pinnedCertificateSHA256
+        self.certificateTrust = certificateTrust
+    }
+
+    /// Records what the first successful connection saw: a CA-issued
+    /// certificate switches the device to CA trust (and drops any pin, so
+    /// renewals keep working); a self-signed one is pinned.
+    public mutating func learnCertificate(sha256: String?, trustedByCA: Bool?) {
+        if trustedByCA == true {
+            certificateTrust = .certificateAuthority
+            pinnedCertificateSHA256 = nil
+        } else if certificateTrust == nil, pinnedCertificateSHA256 == nil, let sha256 {
+            certificateTrust = .pinned
+            pinnedCertificateSHA256 = sha256
+        }
+    }
+
+    /// Forgets what is known about the certificate, for example after the
+    /// addresses change.
+    public mutating func resetCertificateTrust() {
+        pinnedCertificateSHA256 = nil
+        certificateTrust = nil
     }
 
     public var hasSwitch: Bool { targets.contains { $0.switchPort != nil } }

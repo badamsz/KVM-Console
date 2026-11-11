@@ -79,7 +79,9 @@ Requires the web terminal (`kvmd-webterm`), which PiKVM OS enables by default.
 
 ## Notes
 
-- PiKVMs use self-signed certificates. The app pins the certificate's SHA-256 the first time it connects and rejects a different one after that. Editing a device's addresses clears the pin.
+- Certificates: PiKVMs ship with self-signed certificates. The app pins a self-signed certificate's SHA-256 the first time it connects and rejects a different one after that.
+- If a PiKVM's certificate is issued by a certificate authority this Mac trusts (for example an internal step-ca that the PiKVM renews from with ACME), the app notices on the first connection and from then on accepts any certificate that CA issues for the device, so renewals keep working. It also stops accepting certificates the Mac doesn't trust for that device. A certificate issued for one of the device's names (say its LAN name) is accepted when connecting through another (say Tailscale). Install your CA's root certificate in Keychain Access and set it to Always Trust. The machine's page shows which kind of certificate the device uses.
+- Editing a device's addresses forgets what it learned about the certificate.
 - If 2FA is on, append the current TOTP code to the password.
 - Relative mouse mode needs kvmd's alternate mouse enabled. Without it, `usb_rel` isn't offered.
 - Machines behind a PiKVM Switch use the switch's ATX endpoints (`/api/switch/atx/*`). A Switch port's page can also blink that port's light on the Switch, to find it on the hardware.

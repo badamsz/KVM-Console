@@ -6,9 +6,10 @@ public struct Connection: Sendable {
     public let endpoint: Endpoint
     public let client: KVMDClient
 
-    /// The certificate fingerprint seen on this connection; pin it on the
-    /// device if `device.pinnedCertificateSHA256` is nil.
+    /// The certificate fingerprint seen on this connection.
     public var observedCertificateSHA256: String? { client.trustDelegate.observedSHA256 }
+    /// Whether that certificate was trusted through a certificate authority.
+    public var observedTrustedByCA: Bool? { client.trustDelegate.observedTrustedByCA }
 }
 
 public enum ConnectionResolver {
@@ -17,22 +18,27 @@ public enum ConnectionResolver {
     /// than falling through to the next endpoint.
     public static func connect(to device: Device, password: String, probeTimeout: TimeInterval = 4) async throws -> Connection {
         var tried: [String] = []
+        var rejection: String?
         for endpoint in device.endpoints {
             guard let url = endpoint.baseURL else { continue }
             tried.append("\(endpoint.label) (\(endpoint.host))")
+            let policy = TrustPolicy(device: device)
             let probe = KVMDClient(baseURL: url, username: device.username, password: password,
-                                   pinnedSHA256: device.pinnedCertificateSHA256, timeout: probeTimeout)
+                                   trust: policy, timeout: probeTimeout)
             do {
                 try await probe.checkAuth()
             } catch KVMDError.unauthorized {
                 throw KVMDError.unauthorized
             } catch {
+                if let reason = probe.trustDelegate.rejection { rejection = reason }
                 continue
             }
             let client = KVMDClient(baseURL: url, username: device.username, password: password,
-                                    pinnedSHA256: device.pinnedCertificateSHA256 ?? probe.trustDelegate.observedSHA256)
+                                    trust: probe.effectiveTrustPolicy)
             return Connection(device: device, endpoint: endpoint, client: client)
         }
+        // A refused certificate explains the failure better than "couldn't reach".
+        if let rejection { throw KVMDError.certificateRejected(rejection) }
         throw KVMDError.noReachableEndpoint(tried)
     }
 }

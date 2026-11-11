@@ -24,6 +24,14 @@ struct TargetDetailView: View {
                 LabeledContent("Status") { StatusText(status: session.status) }
                 if let v = session.info?.kvmdVersion { LabeledContent("kvmd", value: v) }
                 if let h = session.info?.hostname { LabeledContent("Hostname", value: h) }
+                switch device.certificateTrust {
+                case .certificateAuthority:
+                    LabeledContent("Certificate", value: "Issued by a certificate authority this Mac trusts")
+                case .pinned:
+                    LabeledContent("Certificate", value: "Self-signed, saved on first connection")
+                case nil:
+                    EmptyView()
+                }
                 if let port = target.switchPort {
                     LabeledContent("Switch port") {
                         HStack {
