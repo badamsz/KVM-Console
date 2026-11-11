@@ -56,6 +56,16 @@ final class AppModel {
         statusItem?.setVisible(visible)
     }
 
+    /// Makes a machine's Switch port the active one. Does nothing for a PiKVM without a Switch.
+    func switchPort(to selection: TargetSelection) {
+        guard let target = device(selection.deviceID)?.targets.first(where: { $0.id == selection.targetID }),
+              target.switchPort != nil else { return }
+        let session = session(for: selection.deviceID)
+        Task {
+            do { try await session.activate(target) } catch { lastError = error.localizedDescription }
+        }
+    }
+
     func session(for deviceID: UUID) -> DeviceSession {
         if let s = sessions[deviceID] { return s }
         let s = DeviceSession(deviceID: deviceID, model: self)

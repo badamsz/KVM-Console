@@ -20,9 +20,16 @@ struct DeviceListView: View {
                 } else if let target = device.targets.first {
                     TargetRow(device: device, target: target, subtitle: device.model.displayName)
                         .tag(TargetSelection(deviceID: device.id, targetID: target.id))
-                        .contextMenu { DeviceMenu(device: device) }
                 }
             }
+        }
+        // Double-clicking (or pressing Return on) a machine behind a Switch makes its port active.
+        .contextMenu(forSelectionType: TargetSelection.self) { items in
+            if let item = items.first, let device = model.device(item.deviceID) {
+                TargetMenu(device: device, targetID: item.targetID)
+            }
+        } primaryAction: { items in
+            if let item = items.first { model.switchPort(to: item) }
         }
         .overlay {
             if model.devices.isEmpty {
@@ -49,6 +56,26 @@ private struct DeviceHeader: View {
             Text(device.model.displayName).foregroundStyle(.secondary)
         }
         .contextMenu { DeviceMenu(device: device) }
+    }
+}
+
+private struct TargetMenu: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+    let device: Device
+    let targetID: UUID
+
+    var body: some View {
+        let selection = TargetSelection(deviceID: device.id, targetID: targetID)
+        if let target = device.targets.first(where: { $0.id == targetID }) {
+            Button("Open Console") { openWindow(value: selection) }
+            if target.switchPort != nil {
+                Button("Switch to This Port") { model.switchPort(to: selection) }
+                    .disabled(model.session(for: device.id).isOnScreen(target))
+            }
+            Divider()
+        }
+        DeviceMenu(device: device)
     }
 }
 
@@ -81,7 +108,9 @@ private struct TargetRow: View {
                 if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
-            if let port = target.switchPort, session.switchState?.activePort == port {
+            if session.switchingTo == target.id {
+                ProgressView().controlSize(.small).help("Switching to this port…")
+            } else if let port = target.switchPort, session.switchState?.activePort == port {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint).help("Active switch port")
             }
             if let leds {
@@ -89,6 +118,7 @@ private struct TargetRow: View {
                     .frame(width: 8, height: 8).help(leds.power ? "Powered on" : "Powered off")
             }
         }
+        .help(target.switchPort == nil ? "" : "Double-click to switch to this port")
         .task { await session.connectIfNeeded() }
     }
 }
