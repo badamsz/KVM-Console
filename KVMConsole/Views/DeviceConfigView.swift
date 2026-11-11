@@ -258,6 +258,7 @@ struct DeviceConfigView: View {
 
             statusArea
             HStack {
+                HelpButton(topic: "configure-pikvm")
                 if model.phase == .ready {
                     Button { Task { await model.reload() } } label: { Label("Reload", systemImage: "arrow.clockwise") }
                         .disabled(model.isBusy)

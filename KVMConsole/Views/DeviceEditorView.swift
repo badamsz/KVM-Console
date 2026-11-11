@@ -41,6 +41,7 @@ struct DeviceEditorView: View {
                     localSection
                 } else {
                     networkSections
+                    certificateSection
                 }
                 if let testResult {
                     Text(testResult).font(.callout).foregroundStyle(.secondary)
@@ -49,6 +50,7 @@ struct DeviceEditorView: View {
             .formStyle(.grouped)
 
             HStack {
+                HelpButton(topic: isLocal ? "openterface" : "adding-devices")
                 Button("Test Connection") { Task { await test() } }
                     .disabled(testing || (!isLocal && assembled().endpoints.isEmpty))
                 if testing { ProgressView().controlSize(.small) }
@@ -113,6 +115,27 @@ struct DeviceEditorView: View {
                  ? "The NanoKVM web login. The default is admin / admin until you change it."
                  : "If two-factor authentication is on, add the current code to the end of the password.")
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    /// What the app learned about the device's certificate, with a way to
+    /// forget it after the certificate was replaced on purpose.
+    @ViewBuilder private var certificateSection: some View {
+        if !isNew, device.certificateTrust != nil || device.pinnedCertificateSHA256 != nil {
+            Section {
+                LabeledContent("Certificate", value: device.certificateTrust == .certificateAuthority
+                               ? "Issued by a certificate authority this Mac trusts"
+                               : "Self-signed, saved on first connection")
+                Button("Forget Certificate") {
+                    device.resetCertificateTrust()
+                    testResult = "The certificate will be learned again on the next connection after you save."
+                }
+            } header: {
+                Text("Security")
+            } footer: {
+                Text("Forget the certificate if you replaced it on the device or moved it to your own certificate authority.")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

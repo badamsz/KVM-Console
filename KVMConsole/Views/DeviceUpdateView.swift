@@ -158,6 +158,7 @@ struct DeviceUpdateView: View {
             }
 
             HStack {
+                HelpButton(topic: "update-pikvm")
                 Spacer()
                 if model.status == .idle || model.status == .finished(.wrongRootPassword) {
                     Button("Cancel", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
