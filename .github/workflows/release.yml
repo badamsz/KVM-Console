@@ -4,7 +4,7 @@
 #   Tags v*, manual runs            Developer ID signed and notarized when the signing
 #                                   secrets exist; a tag also creates a GitHub Release.
 #
-# Secrets (Settings > Secrets and variables > Actions); see README "Release builds in CI":
+# Secrets (Settings > Secrets and variables > Actions); see README "Release builds":
 #   APPLE_TEAM_ID                      10-character team ID
 #   MACOS_CERTIFICATE_P12_BASE64       "Developer ID Application" certificate + key, .p12, base64
 #   MACOS_CERTIFICATE_PASSWORD         password of that .p12

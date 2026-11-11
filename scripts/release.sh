@@ -4,11 +4,11 @@
 #   scripts/release.sh             Signed with your development identity. For your own Macs.
 #   scripts/release.sh --notarize  Developer ID signed and notarized by Apple. For sharing.
 #
-# Both need Config/Local.xcconfig with your DEVELOPMENT_TEAM (see the README).
+# Both need Config/Local.xcconfig with your DEVELOPMENT_TEAM (see "Building" in the README).
 # --notarize also needs a paid Apple Developer Program membership and stored
 # notary credentials. Create those once with:
 #
-#   xcrun notarytool store-credentials pikvm-console \
+#   xcrun notarytool store-credentials kvm-console \
 #       --apple-id you@example.com --team-id XXXXXXXXXX --password <app-specific password>
 #
 # Use another profile name by setting NOTARY_PROFILE.
@@ -25,7 +25,7 @@ esac
 SCHEME=KVMConsole
 APP_NAME="KVM Console.app"
 BUILD=build/release
-NOTARY_PROFILE="${NOTARY_PROFILE:-pikvm-console}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-kvm-console}"
 
 if [[ ! -f Config/Local.xcconfig ]]; then
   echo "Config/Local.xcconfig is missing. Copy Config/Local.xcconfig.example and set DEVELOPMENT_TEAM." >&2

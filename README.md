@@ -11,7 +11,7 @@ All four planned steps are in. Nothing has been through a wide range of hardware
 1. **Foundation**: device list, LAN → Tailscale fallback, Keychain credentials, kvmd API client, PiKVM Switch ports as targets, per-port mouse mode. ✅
 2. **Console**: H.264 video and audio (WebRTC), MJPEG fallback, keyboard and mouse (absolute and relative), full screen. ✅
 3. **Management**: ISO upload and mounting ✅, ATX power ✅, switch port control ✅.
-4. **Polish**: menu bar quick view, screen previews, shortcuts, release build script. ✅
+4. **Polish**: menu bar quick view, screen previews, shortcuts, release builds (local script and GitHub Actions). ✅
 
 ## Openterface
 
@@ -27,39 +27,37 @@ The serial protocol is implemented from WCH's published CH9329 command set rathe
 
 ## Building
 
+You need macOS 14 or later, Xcode 15.3 or later (the package uses Swift 5.10) and [XcodeGen](https://github.com/yonaskolb/XcodeGen). The Xcode project is not committed: `project.yml` describes it, and `xcodegen generate` writes `KVMConsole.xcodeproj` from it. Run `xcodegen generate` again after pulling changes that add files or edit `project.yml`.
+
+### First build
+
 ```sh
 brew install xcodegen
+cp Config/Local.xcconfig.example Config/Local.xcconfig
+# edit Config/Local.xcconfig and set DEVELOPMENT_TEAM to your 10-character team ID
 xcodegen generate
 open KVMConsole.xcodeproj
 ```
 
-Run the library tests without Xcode with `swift test --package-path Packages/PiKVMKit`. The on-device configuration helper has its own tests: `python3 -m unittest discover -s Packages/PiKVMKit/Tests/HelperTests` (needs `pip install ruamel.yaml pyyaml`).
+Build and run the **KVMConsole** scheme (⌘R). The product is `KVM Console.app`.
 
-### Signing (stops the repeated Keychain prompt)
+`Config/Local.xcconfig` gives the app a stable signing identity. A free personal team works; the example file explains how to find the team ID. The file is ignored by git and survives `xcodegen generate`. Without it the project still builds, but Xcode signs each build "to run locally", every rebuild looks like a new app to the Keychain, and macOS asks again for permission to read the saved device passwords ("KVM Console wants to use your confidential information stored in com.badamsz.PiKVMConsole"). With it, the first launch asks once more; choose **Always Allow** and it stays quiet from then on.
 
-Without a signing team, Xcode signs each build "to run locally", and every rebuild looks like a new app to the Keychain. macOS then asks again for permission to read the saved device passwords ("KVM Console wants to use your confidential information stored in com.badamsz.PiKVMConsole"). To sign with a stable identity:
+### Tests
 
-```sh
-cp Config/Local.xcconfig.example Config/Local.xcconfig
-# edit Config/Local.xcconfig and set DEVELOPMENT_TEAM to your 10-character team ID
-xcodegen generate
-```
+- **PiKVMKit** (models, clients, storage, discovery): ⌘U in Xcode, or `swift test --package-path Packages/PiKVMKit` without Xcode.
+- **On-device configuration helper** (Python): `python3 -m unittest discover -s Packages/PiKVMKit/Tests/HelperTests`. Needs `pip install ruamel.yaml pyyaml`.
 
-A free personal team works. `Config/Local.xcconfig` is ignored by git and survives `xcodegen generate`. The first launch after this asks once more; choose **Always Allow** and it stays quiet from then on.
+### Release builds
 
-### Release build
+There are two ways to make a Release build. CI is the usual one; the local script is for testing a Release build or signing on your own Mac.
 
-`scripts/release.sh` builds a Release copy into `dist/`. It needs `Config/Local.xcconfig` (above).
+#### In CI (GitHub Actions)
 
-- `scripts/release.sh` signs with your development identity. Good for your own Macs.
-- `scripts/release.sh --notarize` signs with Developer ID and has Apple notarize it, so it opens on any Mac without a warning. This needs a paid Apple Developer Program membership and notary credentials stored once with `xcrun notarytool store-credentials pikvm-console`; the script's header has the full command.
+`.github/workflows/release.yml` builds Release on GitHub's macOS runners. It does not need `Config/Local.xcconfig`; signing comes from repository secrets.
 
-### Release builds in CI
-
-`.github/workflows/release.yml` builds Release on GitHub's macOS runners.
-
-- Every pull request and push to `main` produces an ad-hoc signed build, attached to the workflow run as an artifact (`.zip`, `.dmg`, checksums). macOS blocks its first launch; use **Open Anyway** in System Settings > Privacy & Security.
-- Pushing a tag such as `v0.2.0` (or running the workflow by hand from the Actions tab) signs with Developer ID and notarizes when the secrets below exist. A tag also publishes a GitHub Release with the files. A tag with a hyphen (`v0.2.0-beta.1`) becomes a pre-release. The version in the tag becomes the app's version.
+- Every pull request and push to `main` produces an ad-hoc signed build, attached to the workflow run as an artifact (`.zip`, `.dmg`, `SHA256SUMS.txt`). macOS blocks its first launch; use **Open Anyway** in System Settings > Privacy & Security.
+- Pushing a tag such as `v0.2.0` (or running the workflow by hand from the Actions tab) signs with Developer ID and notarizes when the secrets below exist. A tag also publishes a GitHub Release with the files. A tag with a hyphen (`v0.2.0-beta.1`) becomes a pre-release. The version in the tag becomes the app's version, so there is no need to edit `MARKETING_VERSION` in `project.yml` first.
 
 Without the secrets, tagged builds still publish, unsigned. To sign and notarize, add these under Settings > Secrets and variables > Actions (all need a paid Apple Developer Program membership):
 
@@ -71,6 +69,22 @@ Without the secrets, tagged builds still publish, unsigned. To sign and notarize
 | `NOTARY_API_KEY_P8_BASE64` | An App Store Connect API key for notarization: App Store Connect > Users and Access > Integrations > Team Keys, role **Developer**. Download the `.p8` (only possible once), then `base64 -i AuthKey_XXXX.p8 \| pbcopy`. |
 | `NOTARY_API_KEY_ID` | That key's Key ID. |
 | `NOTARY_API_ISSUER_ID` | The Issuer ID shown above the keys list. |
+
+The workflow calls `scripts/ci/package.sh` to sign, notarize and package the app.
+
+#### On your Mac
+
+`scripts/release.sh` runs `xcodegen generate` and builds a Release copy into `dist/`. It needs `Config/Local.xcconfig` (see [First build](#first-build)). The version comes from `MARKETING_VERSION` in `project.yml`.
+
+- `scripts/release.sh` signs with your development identity and leaves `dist/KVM Console.app`. Good for your own Macs.
+- `scripts/release.sh --notarize` signs with Developer ID, has Apple notarize it, and leaves `dist/KVMConsole-<version>.zip`, which opens on any Mac without a warning. This needs a paid Apple Developer Program membership and notary credentials stored once in the Keychain under the profile name `kvm-console`:
+
+  ```sh
+  xcrun notarytool store-credentials kvm-console \
+      --apple-id you@example.com --team-id XXXXXXXXXX --password <app-specific password>
+  ```
+
+  Set `NOTARY_PROFILE` to use a profile with another name.
 
 ## Layout
 
