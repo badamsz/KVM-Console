@@ -121,10 +121,16 @@ public struct DiscoveredDevice: Hashable, Identifiable, Sendable {
     }
 
     /// Prefills a new device for the editor.
+    /// NanoKVM addresses are stored bare: the NanoKVM client tries HTTPS and
+    /// falls back to plain HTTP, so turning HTTPS on later keeps working.
     public func makeDevice() -> Device {
+        let stored: (String) -> String = { host in
+            guard case .nanoKVM = kind, host.lowercased().hasPrefix("http://") else { return host }
+            return String(host.dropFirst("http://".count))
+        }
         var endpoints: [Endpoint] = []
-        if let lanHost { endpoints.append(Endpoint(label: "LAN", host: lanHost)) }
-        if let tailscaleHost { endpoints.append(Endpoint(label: "Tailscale", host: tailscaleHost)) }
+        if let lanHost { endpoints.append(Endpoint(label: "LAN", host: stored(lanHost))) }
+        if let tailscaleHost { endpoints.append(Endpoint(label: "Tailscale", host: stored(tailscaleHost))) }
         return Device(name: Self.prettyName(name), model: kind.suggestedModel, endpoints: endpoints, username: "admin")
     }
 

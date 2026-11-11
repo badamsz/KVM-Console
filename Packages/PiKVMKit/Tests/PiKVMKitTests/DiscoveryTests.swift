@@ -162,7 +162,8 @@ final class DiscoveryTests: XCTestCase {
         let device = found.makeDevice()
         XCTAssertEqual(device.name, "kvm-a1b2")
         XCTAssertEqual(device.username, "admin")
-        XCTAssertEqual(device.endpoints.first?.baseURL?.absoluteString, "http://10.0.0.9")
+        // Stored bare; the NanoKVM client falls back from HTTPS to HTTP itself.
+        XCTAssertEqual(device.endpoints.first?.host, "10.0.0.9")
         // Uses the NanoKVM model once PiKVMModel has it; falls back to Other until then.
         XCTAssertEqual(device.model, PiKVMModel(rawValue: "nanoKVM") ?? .other)
     }
