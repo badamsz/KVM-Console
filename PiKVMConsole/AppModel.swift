@@ -68,7 +68,7 @@ final class AppModel {
         if let i = devices.firstIndex(where: { $0.id == device.id }) {
             var updated = device
             // Endpoints changed: the certificate may legitimately differ.
-            if devices[i].endpoints.map(\.host) != device.endpoints.map(\.host) { updated.pinnedCertificateSHA256 = nil }
+            if devices[i].endpoints.map(\.host) != device.endpoints.map(\.host) { updated.resetCertificateTrust() }
             devices[i] = updated
         } else {
             devices.append(device)

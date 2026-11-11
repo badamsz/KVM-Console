@@ -109,7 +109,7 @@ struct DeviceEditorView: View {
         defer { testing = false }
         let pw = password.isEmpty ? (model.credentials.password(for: device.id) ?? "") : password
         var probe = assembled()
-        probe.pinnedCertificateSHA256 = nil
+        probe.resetCertificateTrust()
         do {
             let conn = try await ConnectionResolver.connect(to: probe, password: pw)
             let info = try? await conn.client.info()

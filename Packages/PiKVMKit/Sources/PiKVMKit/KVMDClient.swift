@@ -6,6 +6,7 @@ public enum KVMDError: Error, LocalizedError, Sendable {
     case http(Int)
     case api(String)
     case noReachableEndpoint([String])
+    case certificateRejected(String)
 
     public var errorDescription: String? {
         switch self {
@@ -15,6 +16,7 @@ public enum KVMDError: Error, LocalizedError, Sendable {
         case .api(let msg): return msg
         case .noReachableEndpoint(let tried):
             return "Couldn't reach the device at " + tried.joined(separator: " or ") + "."
+        case .certificateRejected(let reason): return reason
         }
     }
 }
@@ -26,17 +28,22 @@ public final class KVMDClient: Sendable {
     private let username: String
     private let password: String
     private let session: URLSession
-    private let pinnedSHA256: String?
+    public let trustPolicy: TrustPolicy
     public let trustDelegate: CertificatePinningDelegate
 
     /// - Parameters:
     ///   - password: the kvmd password. With 2FA enabled, append the current TOTP code.
-    public init(baseURL: URL, username: String, password: String, pinnedSHA256: String?, timeout: TimeInterval = 10) {
+    public convenience init(baseURL: URL, username: String, password: String, pinnedSHA256: String?, timeout: TimeInterval = 10) {
+        self.init(baseURL: baseURL, username: username, password: password,
+                  trust: TrustPolicy(pinnedSHA256: pinnedSHA256), timeout: timeout)
+    }
+
+    public init(baseURL: URL, username: String, password: String, trust: TrustPolicy, timeout: TimeInterval = 10) {
         self.baseURL = baseURL
         self.username = username
         self.password = password
-        self.pinnedSHA256 = pinnedSHA256
-        let delegate = CertificatePinningDelegate(pinnedSHA256: pinnedSHA256)
+        self.trustPolicy = trust
+        let delegate = CertificatePinningDelegate(policy: trust)
         self.trustDelegate = delegate
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = timeout
@@ -287,7 +294,15 @@ public final class KVMDClient: Sendable {
     }
 
     /// The certificate fingerprint this client trusts (pinned or observed).
-    public var effectivePinnedSHA256: String? { pinnedSHA256 ?? trustDelegate.observedSHA256 }
+    /// The policy for other connections to the same device: the pin learned on
+    /// this connection is included for a self-signed certificate.
+    public var effectiveTrustPolicy: TrustPolicy {
+        var policy = trustPolicy
+        if !policy.requireCertificateAuthority, policy.pinnedSHA256 == nil, trustDelegate.observedTrustedByCA != true {
+            policy.pinnedSHA256 = trustDelegate.observedSHA256
+        }
+        return policy
+    }
 
     // MARK: Events
 

@@ -74,8 +74,10 @@ final class DeviceSession {
         do {
             let conn = try await ConnectionResolver.connect(to: device, password: password)
             connection = conn
-            if device.pinnedCertificateSHA256 == nil, let fp = conn.observedCertificateSHA256 {
-                model.update(deviceID) { $0.pinnedCertificateSHA256 = fp }
+            var learned = device
+            learned.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA)
+            if learned.certificateTrust != device.certificateTrust || learned.pinnedCertificateSHA256 != device.pinnedCertificateSHA256 {
+                model.update(deviceID) { $0.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA) }
             }
             status = .connected(endpointLabel: conn.endpoint.label, host: conn.endpoint.host)
             info = try? await conn.client.info()
