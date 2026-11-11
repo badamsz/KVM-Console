@@ -21,10 +21,23 @@ final class DeviceSession {
     private(set) var atx: ATXState?
     private(set) var hid: HIDState?
     private(set) var switchState: SwitchState?
+    /// The PiKVM's virtual drive and stored images.
+    private(set) var msd: MSDState?
+    /// An image upload started from this app.
+    private(set) var upload: MediaUpload?
+    /// The last virtual media problem, shown in the media panel.
+    var mediaError: String?
+
+    struct MediaUpload: Equatable {
+        let name: String
+        var sent: Int64
+        var total: Int64
+    }
 
     private weak var model: AppModel?
     private var connection: Connection?
     private var eventTask: Task<Void, Never>?
+    private var uploadTask: Task<Void, Never>?
 
     init(deviceID: UUID, model: AppModel) {
         self.deviceID = deviceID
@@ -73,6 +86,11 @@ final class DeviceSession {
         await refreshATX()
         await refreshHID()
         await refreshSwitch()
+        await refreshMSD()
+    }
+
+    func refreshMSD() async {
+        msd = try? await client?.msd()
     }
 
     private func refreshATX() async {
@@ -105,6 +123,7 @@ final class DeviceSession {
                         case "atx": await self.refreshATX()
                         case "hid": await self.refreshHID()
                         case "switch": await self.refreshSwitch()
+                        case "msd": await self.refreshMSD()
                         default: break
                         }
                     }
@@ -150,6 +169,80 @@ final class DeviceSession {
         } else {
             try await client.atxClick(button)
         }
+    }
+
+    // MARK: Virtual media
+
+    /// Selects `image` for the virtual drive and plugs it into the remote machine.
+    func mountMedia(image: String, cdrom: Bool, writable: Bool) async throws {
+        guard let client else { return }
+        if msd?.drive?.connected == true {
+            try await client.msdSetConnected(false)
+        }
+        try await client.msdSetParams(image: image, cdrom: cdrom, writable: cdrom ? false : writable)
+        try await client.msdSetConnected(true)
+        await refreshMSD()
+    }
+
+    /// Unplugs the virtual drive from the remote machine.
+    func ejectMedia() async throws {
+        guard let client else { return }
+        try await client.msdSetConnected(false)
+        await refreshMSD()
+    }
+
+    func removeImage(_ name: String) async throws {
+        guard let client else { return }
+        try await client.msdRemove(image: name)
+        await refreshMSD()
+    }
+
+    /// Uploads a local ISO or disk image to the PiKVM. Progress is in `upload`.
+    func startUpload(fileURL: URL) {
+        guard upload == nil, let client else { return }
+        let name = MSDImageName.sanitized(fileURL.lastPathComponent)
+        // Files picked in an open panel need this in the sandbox.
+        let scoped = fileURL.startAccessingSecurityScopedResource()
+        let size = Int64((try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+
+        var problem: String?
+        if msd?.images.contains(where: { $0.name == name }) == true {
+            problem = "The PiKVM already has an image named \(name). Delete it first, or rename the file."
+        } else if let free = msd?.freeBytes, size > free {
+            let f = ByteCountFormatter()
+            problem = "\(name) is \(f.string(fromByteCount: size)), but the PiKVM has only \(f.string(fromByteCount: free)) free."
+        }
+        if let problem {
+            if scoped { fileURL.stopAccessingSecurityScopedResource() }
+            mediaError = problem
+            return
+        }
+
+        mediaError = nil
+        upload = MediaUpload(name: name, sent: 0, total: size)
+        uploadTask = Task { [weak self] in
+            do {
+                try await client.msdUpload(fileURL: fileURL, as: name) { sent, total in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.upload?.name == name else { return }
+                        self.upload = MediaUpload(name: name, sent: sent, total: total)
+                    }
+                }
+            } catch {
+                let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
+                if !cancelled {
+                    self?.mediaError = "Uploading \(name) failed: \(error.localizedDescription)"
+                }
+            }
+            if scoped { fileURL.stopAccessingSecurityScopedResource() }
+            self?.upload = nil
+            self?.uploadTask = nil
+            await self?.refreshMSD()
+        }
+    }
+
+    func cancelUpload() {
+        uploadTask?.cancel()
     }
 
     /// Power/HDD LEDs for a target: from the switch for switch ports,
