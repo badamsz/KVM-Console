@@ -61,6 +61,10 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 - The **Console** menu has shortcuts for the window in front: ⌃⌘⌫ sends Ctrl+Alt+Del, ⌃⌘M switches the mouse mode, ⌃⌘I opens virtual media, and ⌃⌘R reconnects. These Control+Command combinations stay on the Mac and are not sent to the remote machine.
 - Keys are sent by physical position, so the remote machine's keyboard layout decides the character.
 
+## Microphone and camera passthrough
+
+On a PiKVM set up for it, the console's **Microphone and Camera** menu sends this Mac's microphone and camera to the remote machine, which sees them as a USB microphone and webcam. It needs H.264 video (WebRTC) and a recent PiKVM OS, with the USB microphone and/or webcam enabled in the PiKVM's OTG settings (`otg.devices.audio.enabled` for the microphone, `otg.devices.camera.enabled` for the webcam, in `/etc/kvmd/override.yaml`); the menu only appears when the PiKVM offers them. Both are off whenever a console opens. The camera only starts once an app on the remote machine opens the PiKVM's webcam, at the size that app asks for. Turning either on or off reconnects the video briefly. macOS asks for permission the first time.
+
 ## Virtual media (ISOs and disk images)
 
 **Manage Images…** on a machine's page, or the disc button in a console's toolbar, opens the PiKVM's virtual drive.

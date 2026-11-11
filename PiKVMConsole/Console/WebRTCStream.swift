@@ -1,10 +1,15 @@
 import AppKit
+import AVFoundation
 import PiKVMKit
 import WebRTC
 
 /// Receives the PiKVM's H.264 video and Opus audio over WebRTC, using the
 /// Janus gateway on the device for signalling. Video is drawn into
 /// `videoView`; audio plays through the Mac's default output.
+///
+/// On PiKVMs set up for it, the same connection can also carry this Mac's
+/// microphone and camera to the remote machine, which sees them as a USB
+/// microphone and webcam.
 @MainActor
 final class WebRTCStream: NSObject {
     enum Event {
@@ -14,6 +19,13 @@ final class WebRTCStream: NSObject {
         case videoSize(CGSize)
         /// Whether the PiKVM offers audio (it needs an HDMI audio-capable model).
         case audioAvailable(Bool)
+        /// What the PiKVM can take from this Mac. `cameraInUse` is true while
+        /// an app on the remote machine has the virtual webcam open.
+        case passthrough(mic: Bool, camera: Bool, cameraInUse: Bool)
+        /// Whether this Mac's microphone and camera are being sent right now.
+        case sending(mic: Bool, camera: Bool)
+        /// A problem worth telling the user about that doesn't end the stream.
+        case notice(String)
         /// The stream ended. `error` is nil for a normal close.
         case ended(error: String?)
     }
@@ -25,7 +37,7 @@ final class WebRTCStream: NSObject {
     var volume: Double = 1 { didSet { applyVolume() } }
     var muted = false { didSet { applyVolume() } }
 
-    private static let factory: RTCPeerConnectionFactory = {
+    fileprivate static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
         return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(),
                                         decoderFactory: RTCDefaultVideoDecoderFactory())
@@ -40,6 +52,20 @@ final class WebRTCStream: NSObject {
     private var runTask: Task<Void, Never>?
     private var ended = false
 
+    private var client: KVMDClient?
+    private var wantAudio = true
+    /// What the user asked to send.
+    private var wantMic = false
+    private var wantCamera = false
+    /// What this connection is negotiating.
+    private var usingMic = false
+    private var usingCamera = false
+    private var cameraRequest: JanusFeatures.CameraRequest?
+    private var micTrack: RTCAudioTrack?
+    private var cameraTrack: RTCVideoTrack?
+    private var cameraSource: RTCVideoSource?
+    private var capturer: RTCCameraVideoCapturer?
+
     override init() {
         videoView = RTCMTLNSVideoView(frame: .zero)
         super.init()
@@ -50,11 +76,24 @@ final class WebRTCStream: NSObject {
         videoView.delegate = sizeDelegate
     }
 
-    func start(client: KVMDClient, wantAudio: Bool) {
+    func start(client: KVMDClient, wantAudio: Bool, sendMic: Bool = false, sendCamera: Bool = false) {
         guard runTask == nil else { return }
+        self.client = client
+        self.wantAudio = wantAudio
+        self.wantMic = sendMic
+        self.wantCamera = sendCamera
         runTask = Task { [weak self] in
-            await self?.run(client: client, wantAudio: wantAudio)
+            await self?.run()
         }
+    }
+
+    /// Changes what is sent. Takes effect by renegotiating the connection,
+    /// which interrupts the video for a moment.
+    func setSending(mic: Bool, camera: Bool) {
+        guard mic != wantMic || camera != wantCamera else { return }
+        wantMic = mic
+        wantCamera = camera
+        renegotiate()
     }
 
     func stop() {
@@ -64,10 +103,27 @@ final class WebRTCStream: NSObject {
         cleanup()
     }
 
+    /// Starts signalling again on a fresh session, keeping the video view.
+    private func renegotiate() {
+        guard !ended, client != nil else { return }
+        runTask?.cancel()
+        cleanup()
+        runTask = Task { [weak self] in
+            await self?.run()
+        }
+    }
+
     private func cleanup() {
         if let videoTrack { videoTrack.remove(videoView) }
         videoTrack = nil
         audioTrack = nil
+        capturer?.stopCapture()
+        capturer = nil
+        cameraSource = nil
+        cameraTrack = nil
+        micTrack = nil
+        usingMic = false
+        usingCamera = false
         peer?.close()
         peer = nil
         peerDelegate = nil
@@ -89,7 +145,8 @@ final class WebRTCStream: NSObject {
 
     // MARK: Signalling
 
-    private func run(client: KVMDClient, wantAudio: Bool) async {
+    private func run() async {
+        guard let client else { return }
         do {
             let janus = try JanusSession(client: client)
             self.janus = janus
@@ -103,16 +160,39 @@ final class WebRTCStream: NSObject {
                 case .features(let features):
                     useAudio = features.audio && wantAudio
                     emit(.audioAvailable(features.audio))
+                    emit(.passthrough(mic: features.mic, camera: features.camera, cameraInUse: features.cameraRequest != nil))
+                    usingMic = features.mic && wantMic
+                    if usingMic, !(await Self.allowed(.audio)) {
+                        usingMic = false
+                        emit(.notice("PiKVM Console isn't allowed to use the microphone. Turn it on in System Settings → Privacy & Security → Microphone."))
+                    }
+                    cameraRequest = features.cameraRequest
+                    usingCamera = features.camera && wantCamera && features.cameraRequest != nil
+                    if usingCamera, !(await Self.allowed(.video)) {
+                        usingCamera = false
+                        emit(.notice("PiKVM Console isn't allowed to use the camera. Turn it on in System Settings → Privacy & Security → Camera."))
+                    }
+                    if Task.isCancelled || ended { return }
                     makePeer(iceURL: features.iceURL)
-                    try await janus.watch(audio: useAudio)
+                    try await janus.watch(audio: useAudio, mic: usingMic, camera: usingCamera)
                 case .offer(let sdp):
-                    let answer = try await answer(toOffer: sdp)
+                    let answer = try await answer(toOffer: sdp, receiveAudio: useAudio)
                     try await janus.start(answerSDP: answer)
+                    emit(.sending(mic: usingMic, camera: usingCamera))
+                case .camera(let action):
+                    // The remote machine opened or closed the virtual webcam. The web UI
+                    // reconnects in these cases so the camera track can be added or dropped.
+                    let relevant = wantCamera && (
+                        (action == "online" && !usingCamera) || (action == "offline" && usingCamera) || action == "lost")
+                    if relevant {
+                        renegotiate()
+                        return
+                    }
                 case .pluginError:
                     // Usually "no video yet": ask again shortly, like the web UI does.
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                     if Task.isCancelled || ended { return }
-                    try await janus.watch(audio: useAudio)
+                    try await janus.watch(audio: useAudio, mic: usingMic, camera: usingCamera)
                 case .webrtcUp:
                     emit(.connected)
                 case .hangup(let reason):
@@ -180,7 +260,7 @@ final class WebRTCStream: NSObject {
         audioTrack.source.volume = muted ? 0 : max(0, min(1, volume))
     }
 
-    private func answer(toOffer sdp: String) async throws -> String {
+    private func answer(toOffer sdp: String, receiveAudio: Bool) async throws -> String {
         guard let peer else { throw JanusError.janus("no peer connection") }
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
 
@@ -189,6 +269,7 @@ final class WebRTCStream: NSObject {
                 if let error { c.resume(throwing: error) } else { c.resume() }
             }
         }
+        attachLocalMedia(to: peer, receiveAudio: receiveAudio)
         let answer: RTCSessionDescription = try await withCheckedThrowingContinuation { c in
             peer.answer(for: constraints) { description, error in
                 if let description {
@@ -207,6 +288,80 @@ final class WebRTCStream: NSObject {
             }
         }
         return stereo
+    }
+}
+
+// MARK: Sending the Mac's microphone and camera
+
+extension WebRTCStream {
+    /// Asks for (or checks) permission to use the microphone or camera.
+    fileprivate static func allowed(_ media: AVMediaType) async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: media) {
+        case .authorized: return true
+        case .notDetermined: return await AVCaptureDevice.requestAccess(for: media)
+        default: return false
+        }
+    }
+
+    /// Puts the Mac's microphone and camera on the transceivers the PiKVM's
+    /// offer created. The plugin's offer always has video as mid "v" and audio
+    /// as mid "a"; they become two-way when the mic or camera was asked for.
+    fileprivate func attachLocalMedia(to peer: RTCPeerConnection, receiveAudio: Bool) {
+        for transceiver in peer.transceivers {
+            switch transceiver.mediaType {
+            case .audio where usingMic:
+                let source = Self.factory.audioSource(with: RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil))
+                let track = Self.factory.audioTrack(with: source, trackId: "mic")
+                micTrack = track
+                transceiver.sender.track = track
+                transceiver.setDirection(receiveAudio ? .sendRecv : .sendOnly, error: nil)
+            case .video where usingCamera:
+                guard let track = startCamera() else {
+                    usingCamera = false
+                    continue
+                }
+                transceiver.sender.track = track
+                transceiver.setDirection(.sendRecv, error: nil)
+            default:
+                break
+            }
+        }
+    }
+
+    /// Starts the Mac's camera at a size close to what the remote machine asked
+    /// for, and scales it to exactly that size.
+    private func startCamera() -> RTCVideoTrack? {
+        guard let request = cameraRequest else { return nil }
+        let devices = RTCCameraVideoCapturer.captureDevices()
+        guard let device = AVCaptureDevice.default(for: .video).flatMap({ d in devices.first { $0.uniqueID == d.uniqueID } })
+                ?? devices.first else {
+            emit(.notice("No camera was found on this Mac."))
+            return nil
+        }
+        let formats = RTCCameraVideoCapturer.supportedFormats(for: device)
+        func size(_ f: AVCaptureDevice.Format) -> (Int, Int) {
+            let d = CMVideoFormatDescriptionGetDimensions(f.formatDescription)
+            return (Int(d.width), Int(d.height))
+        }
+        // The smallest format at least as large as requested, else the largest there is.
+        let bigEnough = formats.filter { size($0).0 >= request.width && size($0).1 >= request.height }
+        guard let format = bigEnough.min(by: { size($0).0 * size($0).1 < size($1).0 * size($1).1 })
+                ?? formats.max(by: { size($0).0 * size($0).1 < size($1).0 * size($1).1 }) else {
+            emit(.notice("The camera doesn't offer a usable video format."))
+            return nil
+        }
+        let maxFPS = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 30
+        let fps = max(1, min(request.fps, Int(maxFPS)))
+
+        let source = Self.factory.videoSource()
+        source.adaptOutputFormat(toWidth: Int32(request.width), height: Int32(request.height), fps: Int32(fps))
+        let capturer = RTCCameraVideoCapturer(delegate: source)
+        capturer.startCapture(with: device, format: format, fps: fps)
+        self.capturer = capturer
+        cameraSource = source
+        let track = Self.factory.videoTrack(with: source, trackId: "camera")
+        cameraTrack = track
+        return track
     }
 }
 

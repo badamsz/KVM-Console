@@ -159,6 +159,30 @@ private struct ConsoleContent: View {
                     .help("Remote audio")
                 }
 
+                if model.micAvailable || model.cameraAvailable {
+                    Menu {
+                        if model.micAvailable {
+                            Toggle("Send Microphone", isOn: Binding(
+                                get: { model.sendMic },
+                                set: { model.setPassthrough(mic: $0, camera: model.sendCamera) }))
+                        }
+                        if model.cameraAvailable {
+                            Toggle("Send Camera", isOn: Binding(
+                                get: { model.sendCamera },
+                                set: { model.setPassthrough(mic: model.sendMic, camera: $0) }))
+                            if model.sendCamera, !model.sendingCamera {
+                                Text(model.cameraInUse ? "Starting the camera…" : "Starts when an app on the remote machine opens the PiKVM camera")
+                            }
+                        }
+                        Divider()
+                        Text("The remote machine sees these as a USB microphone and webcam.")
+                    } label: {
+                        Label("Microphone and Camera",
+                              systemImage: (model.sendingMic || model.sendingCamera) ? "video.and.waveform.fill" : "video.and.waveform")
+                    }
+                    .help((model.sendingMic || model.sendingCamera) ? "Sending this Mac's microphone or camera" : "Send this Mac's microphone or camera to the remote machine")
+                }
+
                 if session.msd?.enabled == true {
                     let mediaConnected = session.msd?.drive?.connected == true
                     Button { model.showingMedia = true } label: {

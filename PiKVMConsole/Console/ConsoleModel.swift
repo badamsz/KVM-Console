@@ -81,6 +81,17 @@ final class ConsoleModel {
     private(set) var webRTCView: NSView?
     /// Whether this PiKVM offers audio (only known in H.264 mode).
     private(set) var audioAvailable = false
+    /// Whether the PiKVM can take this Mac's microphone or camera (H.264 mode only).
+    private(set) var micAvailable = false
+    private(set) var cameraAvailable = false
+    /// True while an app on the remote machine has the PiKVM's webcam open.
+    private(set) var cameraInUse = false
+    /// What the user asked to send. Off whenever a console opens.
+    private(set) var sendMic = false
+    private(set) var sendCamera = false
+    /// What is actually being sent right now.
+    private(set) var sendingMic = false
+    private(set) var sendingCamera = false
     var volume = ConsolePreferences.volume {
         didSet { ConsolePreferences.volume = volume; webRTC?.volume = volume }
     }
@@ -169,6 +180,11 @@ final class ConsoleModel {
         webRTCView = nil
         webRTCUp = false
         audioAvailable = false
+        micAvailable = false
+        cameraAvailable = false
+        cameraInUse = false
+        sendingMic = false
+        sendingCamera = false
     }
 
     /// Drops the connection so the run loop connects again from scratch.
@@ -185,6 +201,14 @@ final class ConsoleModel {
         } else if app?.frontConsole === self {
             app?.frontConsole = nil
         }
+    }
+
+    /// Starts or stops sending this Mac's microphone and camera to the remote
+    /// machine. The video reconnects briefly to apply it.
+    func setPassthrough(mic: Bool, camera: Bool) {
+        sendMic = mic
+        sendCamera = camera
+        webRTC?.setSending(mic: mic, camera: camera)
     }
 
     func toggleMouseMode() {
@@ -283,7 +307,7 @@ final class ConsoleModel {
         }
         webRTC = stream
         webRTCView = stream.videoView
-        stream.start(client: client, wantAudio: true)
+        stream.start(client: client, wantAudio: true, sendMic: sendMic, sendCamera: sendCamera)
 
         // If the media connection never comes up, use MJPEG instead.
         webRTCWatchdog = Task { [weak self] in
@@ -306,6 +330,15 @@ final class ConsoleModel {
             if state != .noSignal { state = .live }
         case .audioAvailable(let available):
             audioAvailable = available
+        case .passthrough(let mic, let camera, let inUse):
+            micAvailable = mic
+            cameraAvailable = camera
+            cameraInUse = inUse
+        case .sending(let mic, let camera):
+            sendingMic = mic
+            sendingCamera = camera
+        case .notice(let message):
+            app?.lastError = message
         case .ended(let error):
             if webRTCUp {
                 // It was working: reconnect the whole session.
