@@ -37,8 +37,8 @@ public enum BonjourBrowser {
                         guard case .added(let result) = change,
                               case .service(let name, _, _, _) = result.endpoint,
                               state.claim(result.endpoint) else { continue }
-                        var txt: [String: String] = [:]
-                        if case .bonjour(let record) = result.metadata { txt = record.dictionary }
+                        let txt: [String: String]
+                        if case .bonjour(let record) = result.metadata { txt = record.dictionary } else { txt = [:] }
                         BonjourBrowser.resolve(result.endpoint, queue: queue) { host, port in
                             continuation.yield(BonjourService(name: name, type: type, host: host, port: port, txt: txt))
                         }
