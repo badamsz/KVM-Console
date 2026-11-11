@@ -2,16 +2,7 @@
 
 A native macOS app (macOS 14+) for remote control and management of [PiKVM](https://docs.pikvm.org) devices, of [Sipeed NanoKVM](https://wiki.sipeed.com/hardware/en/kvm/) devices (NanoKVM, NanoKVM Pro, NanoKVM Go), and of [Openterface](https://openterface.com) USB KVMs plugged into the Mac.
 
-Formerly **PiKVM Console**. The app keeps the old bundle ID (`com.badamsz.PiKVMConsole`) and Keychain service name, so saved settings, passwords and camera/microphone permissions carry over. The device list moves from `~/Library/Application Support/PiKVM Console` to `…/KVM Console` on first launch. After upgrading, delete the old `PiKVMConsole.app` if you had copied it to Applications.
-
-## Status
-
-All four planned steps are in. Nothing has been through a wide range of hardware yet, so expect rough edges.
-
-1. **Foundation**: device list, LAN → Tailscale fallback, Keychain credentials, kvmd API client, PiKVM Switch ports as targets, per-port mouse mode. ✅
-2. **Console**: H.264 video and audio (WebRTC), MJPEG fallback, keyboard and mouse (absolute and relative), full screen. ✅
-3. **Management**: ISO upload and mounting ✅, ATX power ✅, switch port control ✅.
-4. **Polish**: menu bar quick view, screen previews, shortcuts, release builds (local script and GitHub Actions). ✅
+Formerly `PiKVM Console`. The app keeps the old bundle ID (`com.badamsz.PiKVMConsole`) and Keychain service name, so saved settings, passwords and camera/microphone permissions carry over. The device list moves from `~/Library/Application Support/PiKVM Console` to `…/KVM Console` on first launch. After upgrading, delete the old `PiKVMConsole.app` if you had copied it to Applications.
 
 ## Openterface
 
