@@ -9,6 +9,7 @@ struct TargetDetailView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var confirmHardOff = false
     @State private var busy = false
+    @State private var showingMedia = false
 
     var body: some View {
         let session = model.session(for: device.id)
@@ -28,6 +29,13 @@ struct TargetDetailView: View {
                             }
                         }
                     }
+                }
+                if let beacon = session.beacon(for: target) {
+                    Toggle("Blink this port's light on the Switch", isOn: Binding(
+                        get: { beacon },
+                        set: { on in run { try await session.setBeacon(on, for: target) } }
+                    ))
+                    .help("Helps find this machine's port and cables on the Switch")
                 }
             }
 
@@ -55,6 +63,22 @@ struct TargetDetailView: View {
                 }
                 .controlSize(.large)
                 .disabled(session.client == nil)
+            }
+
+            if let msd = session.msd, msd.enabled {
+                Section("Virtual Media") {
+                    LabeledContent("Drive") {
+                        if msd.drive?.connected == true, let image = msd.drive?.image {
+                            Text("\(image.name) connected")
+                        } else {
+                            Text("Nothing connected").foregroundStyle(.secondary)
+                        }
+                    }
+                    if let upload = session.upload {
+                        ProgressView("Uploading \(upload.name)", value: Double(upload.sent), total: Double(max(upload.total, 1)))
+                    }
+                    Button { showingMedia = true } label: { Label("Manage Images…", systemImage: "opticaldisc") }
+                }
             }
 
             Section("Power") {
@@ -86,6 +110,7 @@ struct TargetDetailView: View {
             }
             .help("Run pikvm-update on this PiKVM")
         }
+        .sheet(isPresented: $showingMedia) { VirtualMediaView(deviceID: device.id).environment(model) }
         .confirmationDialog("Force off \(target.name)?", isPresented: $confirmHardOff) {
             Button("Force Off", role: .destructive) { run { try await session.power(.offHard, for: target) } }
         } message: {

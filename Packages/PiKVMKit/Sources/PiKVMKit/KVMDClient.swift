@@ -56,6 +56,8 @@ public final class KVMDClient: Sendable {
         }
         if !query.isEmpty {
             comps.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+            // URLComponents leaves "+" alone, but kvmd reads it as a space (file names can contain it).
+            comps.percentEncodedQuery = comps.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         }
         guard let url = comps.url else { throw KVMDError.invalidURL }
         var req = URLRequest(url: url)
@@ -152,6 +154,12 @@ public final class KVMDClient: Sendable {
         _ = try await send(Empty.self, "api/switch/set_active", method: "POST", query: ["port": String(port)])
     }
 
+    /// Turns a Switch port's beacon light on or off, to find the port on the hardware.
+    public func setSwitchBeacon(port: Int, on: Bool) async throws {
+        _ = try await send(Empty.self, "api/switch/set_beacon", method: "POST",
+                           query: ["port": String(port), "state": on ? "1" : "0"])
+    }
+
     /// ATX power for a machine behind a PiKVM Switch (the switch's own ATX
     /// headers, not the PiKVM's).
     public func switchATXPower(port: Int, _ action: ATXPowerAction) async throws {
@@ -162,6 +170,43 @@ public final class KVMDClient: Sendable {
     public func switchATXClick(port: Int, _ button: ATXButton) async throws {
         _ = try await send(Empty.self, "api/switch/atx/click", method: "POST",
                            query: ["port": String(port), "button": button.rawValue])
+    }
+
+    // MARK: Virtual media
+
+    public func msd() async throws -> MSDState {
+        try await send(MSDState.self, "api/msd")
+    }
+
+    /// Chooses the image and how the drive presents it. Only allowed while
+    /// the drive is disconnected. Pass an empty `image` to clear the selection.
+    public func msdSetParams(image: String? = nil, cdrom: Bool? = nil, writable: Bool? = nil) async throws {
+        var query: [String: String] = [:]
+        if let image { query["image"] = image }
+        if let cdrom { query["cdrom"] = cdrom ? "1" : "0" }
+        if let writable { query["rw"] = writable ? "1" : "0" }
+        _ = try await send(Empty.self, "api/msd/set_params", method: "POST", query: query)
+    }
+
+    /// Plugs the virtual drive into the remote machine, or unplugs it.
+    public func msdSetConnected(_ connected: Bool) async throws {
+        _ = try await send(Empty.self, "api/msd/set_connected", method: "POST", query: ["connected": connected ? "1" : "0"])
+    }
+
+    public func msdRemove(image: String) async throws {
+        _ = try await send(Empty.self, "api/msd/remove", method: "POST", query: ["image": image])
+    }
+
+    /// Uploads a local file to the PiKVM's image storage. kvmd deletes the
+    /// partial image if the upload fails or is cancelled.
+    /// - Parameter progress: bytes sent and total bytes, called off the main thread.
+    public func msdUpload(fileURL: URL, as name: String, progress: @escaping @Sendable (Int64, Int64) -> Void) async throws {
+        var req = try makeRequest("api/msd/write", method: "POST", query: ["image": name, "remove_incomplete": "1"])
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        // Idle timeout: generous, because the PiKVM can stall while it flushes to its SD card.
+        req.timeoutInterval = 600
+        let (data, response) = try await session.upload(for: req, fromFile: fileURL, delegate: UploadProgressDelegate(progress))
+        _ = try Self.decode(Empty.self, data: data, response: response)
     }
 
     // MARK: Console

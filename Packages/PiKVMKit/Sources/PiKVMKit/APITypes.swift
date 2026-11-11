@@ -128,6 +128,8 @@ public struct SwitchState: Sendable, Hashable {
     public let powerLEDs: [Bool]?
     public let hddLEDs: [Bool]?
     public let atxBusy: [Bool]?
+    /// Per-port beacon lights (the blinking "find me" light on the Switch).
+    public let beacons: [Bool]?
 }
 
 extension SwitchState: Decodable {
@@ -147,9 +149,11 @@ extension SwitchState: Decodable {
             let leds: LEDs?
             let busy: [Bool]?
         }
+        struct Beacons: Decodable { let ports: [Bool]? }
         let model: Model?
         let summary: Summary?
         let atx: ATX?
+        let beacons: Beacons?
     }
 
     public init(from decoder: Decoder) throws {
@@ -161,6 +165,7 @@ extension SwitchState: Decodable {
         powerLEDs = raw.atx?.leds?.power
         hddLEDs = raw.atx?.leds?.hdd
         atxBusy = raw.atx?.busy
+        beacons = raw.beacons?.ports
     }
 }
 

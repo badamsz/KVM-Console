@@ -4,11 +4,11 @@ A native macOS app (macOS 14+) for remote control and management of [PiKVM](http
 
 ## Status
 
-Step 2 of 4: the console, with H.264 video and audio over WebRTC and MJPEG as a fallback.
+Step 3 of 4: management. Virtual media (ISO upload and mounting) and ATX power are in.
 
 1. **Foundation**: device list, LAN → Tailscale fallback, Keychain credentials, kvmd API client, PiKVM Switch ports as targets, per-port mouse mode. ✅
 2. **Console**: H.264 video and audio (WebRTC), MJPEG fallback, keyboard and mouse (absolute and relative), full screen. ✅
-3. **Management**: ISO upload and mounting, ATX power, switch port control.
+3. **Management**: ISO upload and mounting ✅, ATX power ✅, switch port control ✅.
 4. **Polish**: menu bar quick view, shortcuts, signed build.
 
 ## Building
@@ -35,7 +35,7 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 
 ## Layout
 
-- `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/switch`, `/api/ws`), Keychain and JSON storage.
+- `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), Keychain and JSON storage.
 - `PiKVMConsole`: the SwiftUI app.
 
 ## Using the console
@@ -48,6 +48,16 @@ A free personal team works. `Config/Local.xcconfig` is ignored by git and surviv
 - **Paste as typing** (⌥⌘V, or the Send Keys menu) types the Mac clipboard's text on the remote machine. Pick the typing speed in the same menu; slower speeds suit BIOS screens and laggy machines. Text longer than 200 characters or with line breaks asks first. The PiKVM maps characters using its own keymap setting (US by default), so the remote machine's layout must match it.
 - Keys are sent by physical position, so the remote machine's keyboard layout decides the character.
 
+## Virtual media (ISOs and disk images)
+
+**Manage Images…** on a machine's page, or the disc button in a console's toolbar, opens the PiKVM's virtual drive.
+
+- **Upload Image…** copies an ISO or disk image from the Mac to the PiKVM, with progress and a Cancel button. A cancelled or failed upload leaves nothing behind.
+- Pick an image, choose **CD/DVD** or **Flash drive**, and press **Connect**. The remote machine sees it as a USB drive. **Eject** unplugs it.
+- A flash drive can be made writable. A CD/DVD is always read-only.
+- Uploading, deleting and changing the image all need the drive ejected first; that is a PiKVM rule.
+- Each PiKVM has one virtual drive. Behind a Switch it goes to whichever port is active.
+
 ## Updating a PiKVM
 
 **Update PiKVM OS…** (toolbar, or right-click a device) runs `pikvm-update` through the PiKVM's web terminal, so it works over the same HTTPS connection as everything else and needs no SSH access. It asks for the device's root password, which can be saved in the Keychain. The update is started detached from the terminal and its log is followed, so a dropped connection or closing the window doesn't interrupt it. The PiKVM reboots itself when updates were installed.
@@ -59,4 +69,4 @@ Requires the web terminal (`kvmd-webterm`), which PiKVM OS enables by default.
 - PiKVMs use self-signed certificates. The app pins the certificate's SHA-256 the first time it connects and rejects a different one after that. Editing a device's addresses clears the pin.
 - If 2FA is on, append the current TOTP code to the password.
 - Relative mouse mode needs kvmd's alternate mouse enabled. Without it, `usb_rel` isn't offered.
-- Machines behind a PiKVM Switch use the switch's ATX endpoints (`/api/switch/atx/*`).
+- Machines behind a PiKVM Switch use the switch's ATX endpoints (`/api/switch/atx/*`). A Switch port's page can also blink that port's light on the Switch, to find it on the hardware.
