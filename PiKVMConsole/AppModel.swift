@@ -28,6 +28,9 @@ final class AppModel {
     var editorRequest: EditorRequest?
     var updateRequest: UpdateRequest?
     var lastError: String?
+    /// The console whose window is in front, for the Console menu. Not observed:
+    /// the menu reads it when a command runs, so console updates never rebuild the menu.
+    @ObservationIgnored weak var frontConsole: ConsoleModel?
     private(set) var sessions: [UUID: DeviceSession] = [:]
 
     private let store: DeviceStore

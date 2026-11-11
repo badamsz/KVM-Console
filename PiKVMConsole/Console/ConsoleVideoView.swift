@@ -122,6 +122,7 @@ final class ConsoleNSView: NSView {
         super.viewDidMoveToWindow()
         NotificationCenter.default.removeObserver(self)
         guard let window else {
+            model.windowIsKey(false)
             releaseEverything()
             return
         }
@@ -133,13 +134,22 @@ final class ConsoleNSView: NSView {
                                                name: NSWindow.didEnterFullScreenNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(fullScreenChanged(_:)),
                                                name: NSWindow.willExitFullScreenNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyWindowChanged(_:)),
+                                               name: NSWindow.didBecomeKeyNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyWindowChanged(_:)),
+                                               name: NSWindow.didResignKeyNotification, object: window)
         model.isFullScreen = window.styleMask.contains(.fullScreen)
+        model.windowIsKey(window.isKeyWindow)
         window.makeFirstResponder(self)
         startMoveTimer()
     }
 
     @objc private func windowLostFocus() {
         releaseEverything()
+    }
+
+    @objc private func keyWindowChanged(_ note: Notification) {
+        model.windowIsKey(note.name == NSWindow.didBecomeKeyNotification)
     }
 
     @objc private func fullScreenChanged(_ note: Notification) {

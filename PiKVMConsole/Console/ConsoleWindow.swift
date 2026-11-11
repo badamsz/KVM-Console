@@ -83,7 +83,6 @@ private struct ConsoleContent: View {
         .background(Color.black.ignoresSafeArea())
         .navigationTitle(model.target?.name ?? "Console")
         .navigationSubtitle(subtitle)
-        .focusedSceneValue(\.console, model)
         .sheet(isPresented: Binding(get: { model.showingMedia }, set: { model.showingMedia = $0 })) { VirtualMediaView(deviceID: model.selection.deviceID).environment(app) }
         // In full screen the video can have the whole display; View > Hide Toolbar in Full Screen turns this off.
         .toolbar(model.isFullScreen && hideToolbarInFullScreen ? .hidden : .automatic, for: .windowToolbar)
