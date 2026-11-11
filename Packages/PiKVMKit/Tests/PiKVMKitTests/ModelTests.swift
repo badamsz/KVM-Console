@@ -76,4 +76,23 @@ final class ModelTests: XCTestCase {
         try store.save(devices)
         XCTAssertEqual(try store.load(), devices)
     }
+
+    func testLegacyFolderMigration() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: base) }
+        let old = base.appendingPathComponent("PiKVM Console")
+        let new = base.appendingPathComponent("KVM Console")
+        try fm.createDirectory(at: old, withIntermediateDirectories: true)
+        try Data("[]".utf8).write(to: old.appendingPathComponent("devices.json"))
+
+        DeviceStore.migrateLegacyFolder(from: old, to: new)
+        XCTAssertFalse(fm.fileExists(atPath: old.path))
+        XCTAssertTrue(fm.fileExists(atPath: new.appendingPathComponent("devices.json").path))
+
+        // An existing new folder is never replaced.
+        try fm.createDirectory(at: old, withIntermediateDirectories: true)
+        DeviceStore.migrateLegacyFolder(from: old, to: new)
+        XCTAssertTrue(fm.fileExists(atPath: old.path))
+    }
 }

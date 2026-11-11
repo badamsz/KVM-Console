@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>PiKVM Console</string>
+	<string>KVM Console</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -45,10 +45,10 @@
 		<string>_ssh._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>PiKVM Console shows the video from an Openterface plugged into this Mac, and sends your camera to a PiKVM when you turn on Send Camera in a console.</string>
+	<string>KVM Console shows the video from an Openterface plugged into this Mac, and sends your camera to a PiKVM when you turn on Send Camera in a console.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>PiKVM Console plays the sound from an Openterface plugged into this Mac, and sends your microphone to a PiKVM when you turn on Send Microphone in a console.</string>
+	<string>KVM Console plays the sound from an Openterface plugged into this Mac, and sends your microphone to a PiKVM when you turn on Send Microphone in a console.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>PiKVM Console connects to PiKVM devices on your local network and can search it for KVMs.</string>
+	<string>KVM Console connects to PiKVM devices on your local network and can search it for KVMs.</string>
 </dict>
 </plist>

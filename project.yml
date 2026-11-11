@@ -1,5 +1,5 @@
-# Generate PiKVMConsole.xcodeproj with:  xcodegen generate
-name: PiKVMConsole
+# Generate KVMConsole.xcodeproj with:  xcodegen generate
+name: KVMConsole
 options:
   bundleIdPrefix: com.badamsz
   deploymentTarget:
@@ -21,22 +21,22 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  PiKVMConsole:
+  KVMConsole:
     type: application
     platform: macOS
     sources:
-      - PiKVMConsole
+      - KVMConsole
     dependencies:
       - package: PiKVMKit
       - package: WebRTC
     info:
-      path: PiKVMConsole/Info.plist
+      path: KVMConsole/Info.plist
       properties:
-        CFBundleDisplayName: PiKVM Console
+        CFBundleDisplayName: KVM Console
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
-        NSLocalNetworkUsageDescription: PiKVM Console connects to PiKVM devices on your local network and can search it for KVMs.
+        NSLocalNetworkUsageDescription: KVM Console connects to PiKVM devices on your local network and can search it for KVMs.
         # Bonjour types browsed by Find Devices (see BonjourBrowser.serviceTypes).
         NSBonjourServices:
           - _pikvm._tcp
@@ -52,10 +52,10 @@ targets:
             ts.net:
               NSIncludesSubdomains: true
               NSExceptionAllowsInsecureHTTPLoads: true
-        NSMicrophoneUsageDescription: PiKVM Console plays the sound from an Openterface plugged into this Mac, and sends your microphone to a PiKVM when you turn on Send Microphone in a console.
-        NSCameraUsageDescription: PiKVM Console shows the video from an Openterface plugged into this Mac, and sends your camera to a PiKVM when you turn on Send Camera in a console.
+        NSMicrophoneUsageDescription: KVM Console plays the sound from an Openterface plugged into this Mac, and sends your microphone to a PiKVM when you turn on Send Microphone in a console.
+        NSCameraUsageDescription: KVM Console shows the video from an Openterface plugged into this Mac, and sends your camera to a PiKVM when you turn on Send Camera in a console.
     entitlements:
-      path: PiKVMConsole/PiKVMConsole.entitlements
+      path: KVMConsole/KVMConsole.entitlements
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
@@ -71,16 +71,21 @@ targets:
         com.apple.security.files.user-selected.read-only: true
     settings:
       base:
+        # The app was called PiKVM Console. The bundle ID stays the same so the
+        # saved settings, Keychain access and camera/microphone permissions carry over.
         PRODUCT_BUNDLE_IDENTIFIER: com.badamsz.PiKVMConsole
+        # Builds "KVM Console.app"; the Swift module keeps a name without a space.
+        PRODUCT_NAME: KVM Console
+        PRODUCT_MODULE_NAME: KVMConsole
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: $(PIKVM_CODE_SIGN_IDENTITY)
 schemes:
-  PiKVMConsole:
+  KVMConsole:
     build:
       targets:
-        PiKVMConsole: all
+        KVMConsole: all
     test:
       targets:
         - package: PiKVMKit/PiKVMKitTests

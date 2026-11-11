@@ -1,6 +1,8 @@
-# PiKVM Console
+# KVM Console
 
 A native macOS app (macOS 14+) for remote control and management of [PiKVM](https://docs.pikvm.org) devices, of [Sipeed NanoKVM](https://wiki.sipeed.com/hardware/en/kvm/) devices (NanoKVM, NanoKVM Pro, NanoKVM Go), and of [Openterface](https://openterface.com) USB KVMs plugged into the Mac.
+
+Formerly **PiKVM Console**. The app keeps the old bundle ID (`com.badamsz.PiKVMConsole`) and Keychain service name, so saved settings, passwords and camera/microphone permissions carry over. The device list moves from `~/Library/Application Support/PiKVM Console` to `…/KVM Console` on first launch. After upgrading, delete the old `PiKVMConsole.app` if you had copied it to Applications.
 
 ## Status
 
@@ -26,14 +28,14 @@ The serial protocol is implemented from WCH's published CH9329 command set rathe
 ```sh
 brew install xcodegen
 xcodegen generate
-open PiKVMConsole.xcodeproj
+open KVMConsole.xcodeproj
 ```
 
 Run the library tests without Xcode with `swift test --package-path Packages/PiKVMKit`. The on-device configuration helper has its own tests: `python3 -m unittest discover -s Packages/PiKVMKit/Tests/HelperTests` (needs `pip install ruamel.yaml pyyaml`).
 
 ### Signing (stops the repeated Keychain prompt)
 
-Without a signing team, Xcode signs each build "to run locally", and every rebuild looks like a new app to the Keychain. macOS then asks again for permission to read the saved device passwords ("PiKVM Console wants to use your confidential information stored in com.badamsz.PiKVMConsole"). To sign with a stable identity:
+Without a signing team, Xcode signs each build "to run locally", and every rebuild looks like a new app to the Keychain. macOS then asks again for permission to read the saved device passwords ("KVM Console wants to use your confidential information stored in com.badamsz.PiKVMConsole"). To sign with a stable identity:
 
 ```sh
 cp Config/Local.xcconfig.example Config/Local.xcconfig
@@ -71,7 +73,7 @@ Without the secrets, tagged builds still publish, unsigned. To sign and notarize
 ## Layout
 
 - `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), the NanoKVM client (`NanoKVMClient.swift`), Keychain and JSON storage, and network discovery (`Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API).
-- `PiKVMConsole`: the SwiftUI app.
+- `KVMConsole`: the SwiftUI app.
 
 ## Finding devices on the network
 

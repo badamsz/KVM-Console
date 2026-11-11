@@ -24,7 +24,7 @@ final class OpenterfaceCapture {
     }
 
     private let box = SessionBox()
-    private let queue = DispatchQueue(label: "PiKVMConsole.OpenterfaceCapture")
+    private let queue = DispatchQueue(label: "KVMConsole.OpenterfaceCapture")
     let videoDevice: AVCaptureDevice
     /// The view the video is drawn in.
     let view: CapturePreviewView
@@ -144,7 +144,7 @@ final class OpenterfaceCapture {
     /// Takes one picture from the capture device, for the machine's screen preview.
     static func snapshot(videoID: String) async throws -> NSImage {
         guard await requestAccess(for: .video) else {
-            throw CaptureError.cantUse("allow camera access for PiKVM Console in System Settings > Privacy & Security > Camera.")
+            throw CaptureError.cantUse("allow camera access for KVM Console in System Settings > Privacy & Security > Camera.")
         }
         guard let device = AVCaptureDevice(uniqueID: videoID) else { throw CaptureError.notFound }
         let grabber = FrameGrabber()
@@ -173,7 +173,7 @@ final class CapturePreviewView: NSView {
 /// Runs a short capture session and returns its first good frame.
 private final class FrameGrabber: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
     private let session = AVCaptureSession()
-    private let queue = DispatchQueue(label: "PiKVMConsole.FrameGrabber")
+    private let queue = DispatchQueue(label: "KVMConsole.FrameGrabber")
     private let lock = NSLock()
     private var continuation: CheckedContinuation<NSImage, Error>?
     private var frames = 0

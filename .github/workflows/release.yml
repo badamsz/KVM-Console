@@ -1,4 +1,4 @@
-# Builds PiKVM Console in Release and publishes it.
+# Builds KVM Console in Release and publishes it.
 #
 #   Pull requests, pushes to main  unsigned (ad-hoc) build, kept as a workflow artifact.
 #   Tags v*, manual runs            Developer ID signed and notarized when the signing
@@ -72,11 +72,11 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild archive \
-            -project PiKVMConsole.xcodeproj \
-            -scheme PiKVMConsole \
+            -project KVMConsole.xcodeproj \
+            -scheme KVMConsole \
             -configuration Release \
             -destination 'generic/platform=macOS' \
-            -archivePath build/PiKVMConsole.xcarchive \
+            -archivePath build/KVMConsole.xcarchive \
             MARKETING_VERSION='${{ steps.version.outputs.marketing }}' \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             CODE_SIGNING_ALLOWED=NO \
@@ -129,7 +129,7 @@ jobs:
 
       - name: Sign, notarize and package
         env:
-          APP: build/PiKVMConsole.xcarchive/Products/Applications/PiKVMConsole.app
+          APP: "build/KVMConsole.xcarchive/Products/Applications/KVM Console.app"
           VERSION: ${{ steps.version.outputs.version }}
           SIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
           KEYCHAIN: ${{ steps.cert.outputs.keychain }}
@@ -147,14 +147,14 @@ jobs:
           echo "signed=$signed" >> "$GITHUB_OUTPUT"
           echo "notarized=$notarized" >> "$GITHUB_OUTPUT"
           {
-            echo "### PiKVM Console ${{ steps.version.outputs.version }}"
+            echo "### KVM Console ${{ steps.version.outputs.version }}"
             echo "- Developer ID signed: $signed"
             echo "- Notarized: $notarized"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: PiKVMConsole-${{ steps.version.outputs.version }}
+          name: KVMConsole-${{ steps.version.outputs.version }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
@@ -176,7 +176,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: PiKVMConsole-${{ needs.build.outputs.version }}
+          name: KVMConsole-${{ needs.build.outputs.version }}
           path: dist
 
       - name: Publish the GitHub Release
@@ -190,7 +190,7 @@ jobs:
         run: |
           {
             if [[ "$NOTARIZED" == true ]]; then
-              echo "Signed with Developer ID and notarized by Apple. Open the .dmg and drag PiKVM Console to Applications."
+              echo "Signed with Developer ID and notarized by Apple. Open the .dmg and drag KVM Console to Applications."
             else
               echo "**This build is not notarized.** macOS will block the first launch. Open it once, then go to System Settings > Privacy & Security and click **Open Anyway**."
             fi
@@ -202,7 +202,7 @@ jobs:
             gh release upload "$TAG" dist/* --clobber
           else
             gh release create "$TAG" dist/* \
-              --title "PiKVM Console $VERSION" \
+              --title "KVM Console $VERSION" \
               --notes-file notes.md --generate-notes \
               --verify-tag "${prerelease[@]}"
           fi

@@ -130,7 +130,7 @@ extension NanoKVMClient {
     private func uploadStreaming(fileURL: URL, name: String, size: Int64,
                                  progress: @escaping @Sendable (Int64, Int64) -> Void) async throws {
         for attempt in 0..<2 {
-            let boundary = "PiKVMConsole-\(UUID().uuidString)"
+            let boundary = "KVMConsole-\(UUID().uuidString)"
             let body = try MultipartFileStream(fileURL: fileURL, fileSize: size, fieldName: "file",
                                                fileName: name, boundary: boundary)
             var req = try makeRequest("api/storage/media/files/upload", method: "POST",
@@ -164,7 +164,7 @@ extension NanoKVMClient {
         for index in 0..<totalChunks {
             try Task.checkCancellation()
             let chunk = try handle.read(upToCount: chunkSize) ?? Data()
-            let boundary = "PiKVMConsole-\(UUID().uuidString)"
+            let boundary = "KVMConsole-\(UUID().uuidString)"
             let body = Self.multipartBody(boundary: boundary, fields: [
                 ("chunkIndex", String(index)),
                 ("chunkSize", String(chunkSize)),
@@ -263,7 +263,7 @@ final class MultipartFileStream: @unchecked Sendable {
         stream = input
         self.output = output
         let writer = Thread { [self] in self.pump() }
-        writer.name = "PiKVMConsole upload"
+        writer.name = "KVMConsole upload"
         writer.start()
     }
 

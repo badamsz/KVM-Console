@@ -1,24 +1,24 @@
 #!/bin/bash
-# Signs, notarizes and packages an archived PiKVMConsole.app for CI.
+# Signs, notarizes and packages an archived "KVM Console.app" for CI.
 # Called by .github/workflows/release.yml after `xcodebuild archive`.
 #
 # Inputs (environment):
-#   APP            path to the built PiKVMConsole.app (required)
+#   APP            path to the built "KVM Console.app" (required)
 #   VERSION        version string used in file names (required)
 #   SIGN_IDENTITY  codesigning identity (SHA-1 or name). Empty: ad-hoc signed.
 #   KEYCHAIN       keychain holding SIGN_IDENTITY (with SIGN_IDENTITY)
 #   NOTARY_KEY_PATH, NOTARY_KEY_ID, NOTARY_ISSUER_ID
 #                  App Store Connect API key. All set: notarize and staple.
 #
-# Output: dist/PiKVMConsole-$VERSION.zip, dist/PiKVMConsole-$VERSION.dmg,
+# Output: dist/KVMConsole-$VERSION.zip, dist/KVMConsole-$VERSION.dmg,
 # dist/SHA256SUMS.txt
 set -euo pipefail
 
 : "${APP:?}" "${VERSION:?}"
 SIGN_IDENTITY="${SIGN_IDENTITY:-}"
-ENTITLEMENTS="PiKVMConsole/PiKVMConsole.entitlements"
+ENTITLEMENTS="KVMConsole/KVMConsole.entitlements"
 WORK="${RUNNER_TEMP:-build}/package"
-NAME="PiKVMConsole-$VERSION"
+NAME="KVMConsole-$VERSION"
 
 rm -rf "$WORK" dist
 mkdir -p "$WORK" dist
@@ -89,7 +89,7 @@ echo "==> Packaging $NAME.dmg"
 mkdir -p "$WORK/dmg"
 ditto "$APP" "$WORK/dmg/$(basename "$APP")"
 ln -s /Applications "$WORK/dmg/Applications"
-hdiutil create -volname "PiKVM Console" -srcfolder "$WORK/dmg" -fs HFS+ \
+hdiutil create -volname "KVM Console" -srcfolder "$WORK/dmg" -fs HFS+ \
   -format UDZO -ov "dist/$NAME.dmg"
 if [[ -n "$SIGN_IDENTITY" ]]; then
   codesign --force --timestamp --sign "$SIGN_IDENTITY" ${KEYCHAIN:+--keychain "$KEYCHAIN"} "dist/$NAME.dmg"

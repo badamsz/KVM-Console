@@ -8,11 +8,23 @@ public struct DeviceStore: Sendable {
         self.fileURL = fileURL
     }
 
-    /// `~/Library/Application Support/PiKVM Console/devices.json`
+    /// `~/Library/Application Support/KVM Console/devices.json`
+    ///
+    /// The app used to be called PiKVM Console. If only the old
+    /// `PiKVM Console` folder exists, it is renamed so the saved devices carry over.
     public static var defaultURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("PiKVM Console", isDirectory: true)
-            .appendingPathComponent("devices.json")
+        let folder = base.appendingPathComponent("KVM Console", isDirectory: true)
+        migrateLegacyFolder(from: base.appendingPathComponent("PiKVM Console", isDirectory: true), to: folder)
+        return folder.appendingPathComponent("devices.json")
+    }
+
+    /// Moves `old` to `new` when `old` exists and `new` doesn't. Failures are
+    /// ignored: the app then starts with an empty list and the old folder stays put.
+    static func migrateLegacyFolder(from old: URL, to new: URL) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: old.path), !fm.fileExists(atPath: new.path) else { return }
+        try? fm.moveItem(at: old, to: new)
     }
 
     public func load() throws -> [Device] {

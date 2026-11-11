@@ -164,13 +164,13 @@ final class WebRTCStream: NSObject {
                     usingMic = features.mic && wantMic
                     if usingMic, !(await Self.allowed(.audio)) {
                         usingMic = false
-                        emit(.notice("PiKVM Console isn't allowed to use the microphone. Turn it on in System Settings → Privacy & Security → Microphone."))
+                        emit(.notice("KVM Console isn't allowed to use the microphone. Turn it on in System Settings → Privacy & Security → Microphone."))
                     }
                     cameraRequest = features.cameraRequest
                     usingCamera = features.camera && wantCamera && features.cameraRequest != nil
                     if usingCamera, !(await Self.allowed(.video)) {
                         usingCamera = false
-                        emit(.notice("PiKVM Console isn't allowed to use the camera. Turn it on in System Settings → Privacy & Security → Camera."))
+                        emit(.notice("KVM Console isn't allowed to use the camera. Turn it on in System Settings → Privacy & Security → Camera."))
                     }
                     if Task.isCancelled || ended { return }
                     makePeer(iceURL: features.iceURL)

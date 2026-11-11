@@ -1,11 +1,11 @@
 import SwiftUI
 
 @main
-struct PiKVMConsoleApp: App {
+struct KVMConsoleApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup("PiKVM Console", id: "main") {
+        WindowGroup("KVM Console", id: "main") {
             ContentView()
                 .environment(model)
                 .frame(minWidth: 820, minHeight: 520)

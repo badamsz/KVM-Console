@@ -30,7 +30,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             let image = NSImage(named: "MenuBarIcon")
             image?.isTemplate = true
             item.button?.image = image
-            item.button?.toolTip = "PiKVM Console"
+            item.button?.toolTip = "KVM Console"
             let menu = NSMenu()
             menu.delegate = self
             item.menu = menu
@@ -59,13 +59,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         }
         menu.addItem(.separator())
-        menu.addItem(action("Open PiKVM Console") { [weak self] in self?.showMainWindow() })
+        menu.addItem(action("Open KVM Console") { [weak self] in self?.showMainWindow() })
         menu.addItem(action("Settings…") {
             NSApp.activate(ignoringOtherApps: true)
             NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         })
         menu.addItem(.separator())
-        menu.addItem(action("Quit PiKVM Console") { NSApp.terminate(nil) })
+        menu.addItem(action("Quit KVM Console") { NSApp.terminate(nil) })
     }
 
     // MARK: Building
@@ -207,7 +207,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Toggle("Show PiKVM Console in the menu bar", isOn: $showMenuBarExtra)
+            Toggle("Show KVM Console in the menu bar", isOn: $showMenuBarExtra)
             Toggle("Hide the console toolbar in full screen", isOn: $hideToolbarInFullScreen)
         }
         .formStyle(.grouped)

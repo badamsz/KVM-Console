@@ -5,6 +5,8 @@ import Security
 public struct CredentialStore: Sendable {
     public let service: String
 
+    /// The service name dates from when the app was called PiKVM Console. It is
+    /// kept so passwords saved by earlier versions are still found.
     public init(service: String = "com.badamsz.PiKVMConsole") {
         self.service = service
     }
