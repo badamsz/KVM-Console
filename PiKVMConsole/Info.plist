@@ -37,11 +37,18 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_pikvm._tcp</string>
+		<string>_https._tcp</string>
+		<string>_http._tcp</string>
+		<string>_ssh._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>PiKVM Console sends your camera to the remote machine when you turn on Send Camera in a console.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>PiKVM Console sends your microphone to the remote machine when you turn on Send Microphone in a console.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>PiKVM Console connects to PiKVM devices on your local network.</string>
+	<string>PiKVM Console connects to PiKVM devices on your local network and can search it for KVMs.</string>
 </dict>
 </plist>

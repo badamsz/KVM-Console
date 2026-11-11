@@ -36,7 +36,13 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
-        NSLocalNetworkUsageDescription: PiKVM Console connects to PiKVM devices on your local network.
+        NSLocalNetworkUsageDescription: PiKVM Console connects to PiKVM devices on your local network and can search it for KVMs.
+        # Bonjour types browsed by Find Devices (see BonjourBrowser.serviceTypes).
+        NSBonjourServices:
+          - _pikvm._tcp
+          - _https._tcp
+          - _http._tcp
+          - _ssh._tcp
         # A Sipeed NanoKVM serves plain HTTP unless HTTPS is turned on in its
         # settings. Allow HTTP only to local names (.local, bare host names;
         # IP addresses aren't subject to ATS) and to Tailscale MagicDNS names.
