@@ -14,6 +14,12 @@ struct TargetDetailView: View {
     var body: some View {
         let session = model.session(for: device.id)
         Form {
+            Section("Screen") {
+                ScreenPreviewView(session: session, target: target) {
+                    openWindow(value: TargetSelection(deviceID: device.id, targetID: target.id))
+                }
+            }
+
             Section("Connection") {
                 LabeledContent("Status") { StatusText(status: session.status) }
                 if let v = session.info?.kvmdVersion { LabeledContent("kvmd", value: v) }
@@ -119,6 +125,7 @@ struct TargetDetailView: View {
         .task {
             await session.connectIfNeeded()
             if isActive(session) { try? await session.applyMouseMode(target.mouseMode) }
+            if session.previews[target.id]?.image == nil { await session.refreshPreview(for: target) }
         }
     }
 
@@ -131,6 +138,60 @@ struct TargetDetailView: View {
             busy = true
             defer { busy = false }
             do { try await action() } catch { model.lastError = error.localizedDescription }
+        }
+    }
+}
+
+/// A still picture of the machine's screen with a refresh button.
+private struct ScreenPreviewView: View {
+    let session: DeviceSession
+    let target: Target
+    let openConsole: () -> Void
+
+    var body: some View {
+        let preview = session.previews[target.id]
+        let loading = session.previewsLoading.contains(target.id)
+        let onScreen = session.isOnScreen(target)
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(Color.black)
+                if let image = preview?.image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .opacity(onScreen ? 1 : 0.4)
+                } else if !loading {
+                    Text(onScreen ? "No preview yet" : "Switch to this port to see its screen")
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                if loading { ProgressView().controlSize(.large) }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 230)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2, perform: openConsole)
+            .help("Double-click to open the console")
+
+            HStack {
+                if let error = preview?.error {
+                    Text(error).foregroundStyle(.red).lineLimit(2)
+                } else if !onScreen, preview?.image != nil {
+                    Text("Not the active Switch port. This picture is from \(preview?.date?.formatted(date: .omitted, time: .shortened) ?? "earlier").")
+                        .foregroundStyle(.secondary)
+                } else if let date = preview?.date {
+                    Text("Updated \(date.formatted(date: .omitted, time: .standard))").foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    Task { await session.refreshPreview(for: target) }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .disabled(loading || !onScreen || session.client == nil)
+                .help(onScreen ? "Take a new picture of the screen" : "The PiKVM only sees the active Switch port")
+            }
+            .font(.callout)
         }
     }
 }

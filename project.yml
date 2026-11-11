@@ -33,6 +33,8 @@ targets:
       path: PiKVMConsole/Info.plist
       properties:
         CFBundleDisplayName: PiKVM Console
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.utilities
         NSLocalNetworkUsageDescription: PiKVM Console connects to PiKVM devices on your local network.
     entitlements:

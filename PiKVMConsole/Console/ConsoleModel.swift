@@ -68,6 +68,8 @@ final class ConsoleModel {
     var mouseCaptured = false
     /// True while this console's window is in full screen.
     var isFullScreen = false
+    /// Shows the virtual media panel over this console.
+    var showingMedia = false
 
     /// The mode the user asked for.
     private(set) var videoMode = ConsolePreferences.videoMode
@@ -167,6 +169,17 @@ final class ConsoleModel {
         webRTCView = nil
         webRTCUp = false
         audioAvailable = false
+    }
+
+    /// Drops the connection so the run loop connects again from scratch.
+    func reconnect() {
+        h264Unavailable = false
+        fallbackReason = nil
+        socket?.cancel(with: .goingAway, reason: nil)
+    }
+
+    func toggleMouseMode() {
+        setMouseMode(mouseMode == .relative ? .absolute : .relative)
     }
 
     /// Switches between H.264 and MJPEG and reconnects the video.

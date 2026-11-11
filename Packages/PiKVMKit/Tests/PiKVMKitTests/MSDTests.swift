@@ -71,3 +71,21 @@ final class MSDTests: XCTestCase {
         XCTAssertEqual(req.url?.query(percentEncoded: true), "image=c%2B%2B%20tools.iso")
     }
 }
+
+final class SnapshotTests: XCTestCase {
+    private func response(_ code: Int) -> HTTPURLResponse {
+        HTTPURLResponse(url: URL(string: "https://kvm")!, statusCode: code, httpVersion: nil, headerFields: nil)!
+    }
+
+    func testStreamerNotRunningIs503() {
+        XCTAssertThrowsError(try KVMDClient.checkSnapshot(data: Data(), response: response(503))) { error in
+            guard case KVMDError.http(503) = error else { return XCTFail("unexpected error \(error)") }
+        }
+    }
+
+    func testPictureIsAccepted() throws {
+        try KVMDClient.checkSnapshot(data: Data([0xFF, 0xD8, 0xFF]), response: response(200))
+        XCTAssertThrowsError(try KVMDClient.checkSnapshot(data: Data(), response: response(200)))
+        XCTAssertThrowsError(try KVMDClient.checkSnapshot(data: Data(), response: response(401)))
+    }
+}
