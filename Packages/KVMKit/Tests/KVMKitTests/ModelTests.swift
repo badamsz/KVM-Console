@@ -75,3 +75,43 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(try store.load(), devices)
     }
 }
+
+final class ReorderTests: XCTestCase {
+    private func devices(_ names: String...) -> [Device] {
+        names.map { Device(name: $0, model: .v3) }
+    }
+
+    func testMoveDownPlacesAfterDestination() {
+        var list = devices("A", "B", "C", "D")
+        XCTAssertTrue(list.move(list[0].id, onto: list[2].id))
+        XCTAssertEqual(list.map(\.name), ["B", "C", "A", "D"])
+    }
+
+    func testMoveUpPlacesBeforeDestination() {
+        var list = devices("A", "B", "C", "D")
+        XCTAssertTrue(list.move(list[3].id, onto: list[1].id))
+        XCTAssertEqual(list.map(\.name), ["A", "D", "B", "C"])
+    }
+
+    func testMoveToEnds() {
+        var list = devices("A", "B", "C")
+        list.move(list[0].id, onto: list[2].id)
+        XCTAssertEqual(list.map(\.name), ["B", "C", "A"])
+        list.move(list[2].id, onto: list[0].id)
+        XCTAssertEqual(list.map(\.name), ["A", "B", "C"])
+    }
+
+    func testHiddenItemsBetweenStayInPlace() {
+        // "h" is hidden in the sidebar; moving C up past B leaves it where it was.
+        var list = devices("A", "B", "h", "C")
+        list.move(list[3].id, onto: list[1].id)
+        XCTAssertEqual(list.map(\.name), ["A", "C", "B", "h"])
+    }
+
+    func testNoOpForSameOrMissing() {
+        var list = devices("A", "B")
+        XCTAssertFalse(list.move(list[0].id, onto: list[0].id))
+        XCTAssertFalse(list.move(UUID(), onto: list[0].id))
+        XCTAssertEqual(list.map(\.name), ["A", "B"])
+    }
+}

@@ -53,6 +53,9 @@ extension HelpTopic {
         Right-click the device in the sidebar and choose **Edit…**, **Reconnect** or **Remove**, or use **Edit Device** in a machine's toolbar. Removing a device also deletes its saved passwords from the Keychain.
 
         Changing a device's addresses or model makes the app forget the certificate it saved for it. See [Certificates](help:certificates).
+
+        ## Reordering the sidebar
+        Drag a device onto another one in the sidebar to move it there. For a PiKVM with a Switch, drag its heading. You can also right-click a device and choose **Move Up** or **Move Down**. The order is saved, and the menu bar menu uses it too.
         """)
 
     static let findingDevices = HelpTopic(
