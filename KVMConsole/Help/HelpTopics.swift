@@ -88,7 +88,7 @@ extension HelpTopic {
 
     static let console = HelpTopic(
         "console", title: "Using the Console", symbol: "display",
-        keywords: ["remote control", "full screen", "fullscreen", "video", "h.264", "webrtc", "mjpeg", "audio", "sound", "microphone", "camera", "webcam", "paste", "clipboard", "typing", "send keys", "ctrl+alt+del"],
+        keywords: ["remote control", "full screen", "fullscreen", "video", "h.264", "webrtc", "mjpeg", "audio", "sound", "microphone", "camera", "webcam", "paste", "clipboard", "typing", "formatted paste", "indent", "indentation", "vs code", "code editor", "send keys", "ctrl+alt+del"],
         body: """
         Select a machine and choose **File > Open Console** (⌘↩), double-click the screen picture on its page, or use **Open Console** in the menu bar item. Each machine gets its own console window; opening it again brings that window forward.
 
@@ -106,6 +106,14 @@ extension HelpTopic {
 
         ## Paste as typing
         **Console > Paste Clipboard as Typing** (⌥⌘V) types the text on the Mac's clipboard on the remote machine, key by key, so it works in a BIOS or installer too. Choose a slower **Typing Speed** in the Send Keys menu for BIOS screens and slow machines. Long text, or text with line breaks, asks first, and a progress bar with **Cancel** appears while it types.
+
+        ## Formatted paste for code editors
+        Editors such as VS Code, JetBrains IDEs, Sublime Text and Xcode indent each new line to match the one above. Typed code then gets indented twice, and more with every line. **Console > Paste Clipboard as Formatted Typing** (⇧⌥⌘V, also in the Send Keys menu) fixes that: after each line break it types a character, selects back to the start of the line and deletes it, which removes whatever indent the editor added, then types the next line with its own indentation. The text ends up indented exactly as it was copied.
+
+        - Set **Formatted Paste Shortcuts** in the Send Keys menu to match the remote machine: Shift+Home for Windows and Linux, Shift+Command+Left for macOS.
+        - Click in the editor where the text should go first. The first line is typed where the cursor is; blank lines are left empty.
+        - Use plain paste for terminals, BIOS screens and anything that isn't a text editor, because the line-clearing keys mean something else there.
+        - Editors that close brackets and quotes for you can still add extra ones, with either paste. In VS Code, set **Editor: Auto Closing Brackets** and **Auto Closing Quotes** to *never* while pasting, and press Escape first if a suggestion list is open, because Enter would accept it.
 
         > Paste types with the PiKVM's keymap (US unless you changed it), so the remote machine's keyboard layout must match. NanoKVM and Openterface always type with a US layout.
 
@@ -386,6 +394,7 @@ extension HelpTopic {
         = ⌃⌘F | Enter or leave full screen
         = ⌃⌘T | Hide or show the toolbar in full screen
         = ⌥⌘V | Paste the clipboard as typing
+        = ⇧⌥⌘V | Paste the clipboard as formatted typing, for code editors
         = ⌃⌥ | Release a captured mouse (relative mode)
 
         Other keys, including most ⌘ shortcuts, go to the remote machine while the console is in front. ⌘ is sent as the Windows (Super) key.

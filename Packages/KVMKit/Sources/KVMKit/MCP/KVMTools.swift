@@ -95,6 +95,7 @@ public enum KVMTool: String, CaseIterable, Sendable {
                 inputSchema: Self.schema([
                     "machine": Self.machineProperty,
                     "text": ["type": "string", "description": "The text to type, at most 10,000 characters."],
+                    "formatted": ["type": "boolean", "description": "For code editors that indent new lines themselves (VS Code and the like): after each newline, clear the editor's indent before typing the line's own, so the result keeps the original indentation. Don't use it in terminals or BIOS screens. Default false."],
                 ], required: ["machine", "text"]), kind: kind)
         case .pressKeys:
             return MCPTool(

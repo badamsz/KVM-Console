@@ -57,6 +57,8 @@ struct AppCommands: Commands {
                 .keyboardShortcut(.delete, modifiers: [.control, .command])
             Button("Paste Clipboard as Typing") { model.frontConsole?.pasteClipboard() }
                 .keyboardShortcut("v", modifiers: [.option, .command])
+            Button("Paste Clipboard as Formatted Typing") { model.frontConsole?.pasteClipboard(.formatted) }
+                .keyboardShortcut("v", modifiers: [.shift, .option, .command])
             Divider()
             Button("Switch Mouse Mode") { model.frontConsole?.toggleMouseMode() }
                 .keyboardShortcut("m", modifiers: [.control, .command])

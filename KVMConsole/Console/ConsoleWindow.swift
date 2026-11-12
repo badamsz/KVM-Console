@@ -55,12 +55,12 @@ private struct ConsoleContent: View {
             isPresented: Binding(get: { model.pendingPaste != nil }, set: { if !$0 { model.pendingPaste = nil } }),
             presenting: model.pendingPaste
         ) { text in
-            Button("Type It") { model.typeText(text) }
+            Button("Type It") { model.typeText(text, mode: model.pendingPasteMode) }
             Button("Cancel", role: .cancel) { model.pendingPaste = nil }
         } message: { text in
             let lines = text.split(separator: "\n", omittingEmptySubsequences: false).count
             let seconds = Int(TextPaste.estimatedDuration(characters: text.count, delay: model.typingRate.delay).rounded(.up))
-            Text("\(lines) line\(lines == 1 ? "" : "s"), about \(seconds) second\(seconds == 1 ? "" : "s") at \(model.typingRate.displayName) speed. Each line break is typed as Enter.")
+            Text("\(lines) line\(lines == 1 ? "" : "s"), about \(seconds) second\(seconds == 1 ? "" : "s") at \(model.typingRate.displayName) speed. Each line break is typed as Enter\(model.pendingPasteMode == .formatted ? ", then the editor's indent is replaced with the line's own" : "").")
         }
         // The video stays below the toolbar; only the black backdrop extends under it.
         .background(Color.black.ignoresSafeArea())
@@ -205,6 +205,12 @@ private struct ConsoleContent: View {
                     Divider()
                     Button("Paste Clipboard as Typing (⌥⌘V)") { model.pasteClipboard() }
                         .disabled(model.pasteProgress != nil)
+                    Button("Paste Clipboard as Formatted Typing (⇧⌥⌘V)") { model.pasteClipboard(.formatted) }
+                        .disabled(model.pasteProgress != nil)
+                        .help("For code editors that indent new lines themselves, such as VS Code")
+                    Picker("Formatted Paste Shortcuts", selection: Binding(get: { model.lineStartKey }, set: { model.lineStartKey = $0 })) {
+                        ForEach(LineStartKey.allCases) { Text($0.displayName).tag($0) }
+                    }
                     Picker("Typing Speed", selection: Binding(get: { model.typingRate }, set: { model.typingRate = $0 })) {
                         ForEach(TypingRate.allCases) { rate in
                             Text("\(rate.displayName) (\(rate.detail))").tag(rate)
