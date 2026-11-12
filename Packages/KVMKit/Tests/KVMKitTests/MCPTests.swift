@@ -210,13 +210,14 @@ final class KeyComboTests: XCTestCase {
     func testEveryCodeIsSendable() throws {
         for name in KeyCombo.aliases.values { XCTAssertTrue(KeyCombo.knownCodes.contains(name), name) }
         for name in KeyCombo.punctuation.values { XCTAssertTrue(KeyCombo.knownCodes.contains(name), name) }
-        for n in 1...20 { XCTAssertTrue(KeyCombo.knownCodes.contains("F\(n)"), "F\(n)") }
+        for n in 1...12 { XCTAssertEqual(try KeyCombo.code(for: "f\(n)"), "F\(n)") }
     }
 
     func testRejectsUnknownKeys() {
         XCTAssertThrowsError(try KeyCombo.parse("ctrl+banana"))
         XCTAssertThrowsError(try KeyCombo.parse(""))
         XCTAssertThrowsError(try KeyCombo.parse("f25"))
+        XCTAssertThrowsError(try KeyCombo.parse("f13"))
     }
 }
 

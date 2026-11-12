@@ -105,7 +105,7 @@ public enum KVMTool: String, CaseIterable, Sendable {
                     "keys": [
                         "type": "array", "minItems": 1, "maxItems": 100,
                         "items": ["type": "string"],
-                        "description": "Combinations joined with +: modifiers ctrl, alt, shift, meta (Windows/Command key); keys enter, esc, tab, space, backspace, delete, insert, home, end, pageup, pagedown, up, down, left, right, f1–f20, a–z, 0–9, punctuation, or web key codes such as KeyA.",
+                        "description": "Combinations joined with +: modifiers ctrl, alt, shift, meta (Windows/Command key); keys enter, esc, tab, space, backspace, delete, insert, home, end, pageup, pagedown, up, down, left, right, f1–f12, a–z, 0–9, punctuation, or web key codes such as KeyA.",
                     ],
                     "delay_ms": ["type": "integer", "minimum": 0, "maximum": 5000,
                                  "description": "Pause between combinations in milliseconds. Default 150."],

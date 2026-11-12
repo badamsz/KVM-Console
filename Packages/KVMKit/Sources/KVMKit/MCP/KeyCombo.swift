@@ -12,7 +12,7 @@ public enum KeyCombo {
             switch self {
             case .empty: return "No key was given."
             case .unknownKey(let k):
-                return "Unknown key \"\(k)\". Use names like ctrl, alt, shift, meta, enter, esc, tab, space, backspace, delete, up, down, left, right, home, end, pageup, pagedown, f1–f20, a–z, 0–9, or web key codes such as KeyA."
+                return "Unknown key \"\(k)\". Use names like ctrl, alt, shift, meta, enter, esc, tab, space, backspace, delete, up, down, left, right, home, end, pageup, pagedown, f1–f12, a–z, 0–9, or web key codes such as KeyA."
             }
         }
     }
@@ -55,7 +55,8 @@ public enum KeyCombo {
             if ch.isNumber, ch.isASCII { return "Digit" + String(ch) }
             if let p = punctuation[ch] { return p }
         }
-        if lower.hasPrefix("f"), let n = Int(lower.dropFirst()), (1...20).contains(n) { return "F\(n)" }
+        // F13–F15 sit where PrintScreen, ScrollLock and Pause are, so they aren't sendable.
+        if lower.hasPrefix("f"), let n = Int(lower.dropFirst()), knownCodes.contains("F\(n)") { return "F\(n)" }
         // Case-insensitive match of a web code, such as "keya" or "arrowup".
         if let match = knownCodes.first(where: { $0.lowercased() == lower }) { return match }
         throw ParseError.unknownKey(name)
