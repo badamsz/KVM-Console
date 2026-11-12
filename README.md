@@ -79,6 +79,10 @@ The workflow calls `scripts/ci/package.sh` to sign, notarize and package the app
 
   Set `NOTARY_PROFILE` to use a profile with another name.
 
+#### Mac App Store
+
+The same tag also builds an App Store version and uploads it to App Store Connect, where it appears in TestFlight. That job is skipped until `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` and `APPLE_TEAM_ID` are set; signing is automatic (cloud signing), so no certificate secret is needed. A manual run exports the `.pkg` as an artifact and uploads it only when **Upload to App Store Connect** is ticked. Locally, `scripts/release.sh --app-store` archives and uploads with the Apple ID in Xcode. Listing text, review notes, privacy answers and the remaining setup steps are in [AppStore/README.md](AppStore/README.md).
+
 ## Layout
 
 - `KVMConsole/`: the SwiftUI app.
@@ -95,6 +99,8 @@ The workflow calls `scripts/ci/package.sh` to sign, notarize and package the app
   - `Streaming/`: MJPEG and direct H.264 decoding.
   - `Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API.
   - `MCP/`: the loopback HTTP server, the MCP JSON-RPC endpoint with its access checks, the tool definitions (`KVMTool`) and key combination parsing.
+- `AppStore/`: Mac App Store listing text, review notes, privacy answers and the submission checklist. `docs/` holds the public privacy policy and support pages.
+- `KVMConsole/PrivacyInfo.xcprivacy`: the privacy manifest. Update it when using a new [required-reason API](https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api).
 
 ### Adding a kind of device
 

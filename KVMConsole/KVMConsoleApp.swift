@@ -84,7 +84,7 @@ struct AppCommands: Commands {
             Link("Sipeed NanoKVM Wiki", destination: URL(string: "https://wiki.sipeed.com/hardware/en/kvm/")!)
             Link("Openterface Website", destination: URL(string: "https://openterface.com")!)
             Divider()
-            Link("KVM Console on GitHub", destination: URL(string: "https://github.com/badamsz/PiKVM-Console")!)
+            Link("KVM Console on GitHub", destination: URL(string: "https://github.com/badamsz/KVM-Console")!)
         }
         CommandGroup(after: .newItem) {
             Button("Add Device…") { model.editorRequest = .new }
