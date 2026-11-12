@@ -329,7 +329,8 @@ struct MCPToolRunner {
         let session = try await connected(m)
         try await requireOnScreen(m, session)
         let console = try await liveConsole(m)
-        let (skipped, limitation) = try await console.typeTextAndWait(text)
+        let mode: PasteMode = arguments["formatted"]?.boolValue == true ? .formatted : .plain
+        let (skipped, limitation) = try await console.typeTextAndWait(text, mode: mode)
         if skipped > 0 {
             return .text("Typed \(text.count - skipped) of \(text.count) characters on \(m.label); \(skipped) couldn't be typed. \(limitation)"
                 .trimmingCharacters(in: .whitespaces))

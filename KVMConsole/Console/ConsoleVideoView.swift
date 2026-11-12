@@ -371,12 +371,13 @@ final class ConsoleNSView: NSView {
         // Also the app's other Control+Command shortcuts: T (toolbar in full screen), Delete
         // (Ctrl+Alt+Del), M (mouse mode), I (virtual media) and R (reconnect).
         if flags.contains([.command, .control]), [3, 17, 51, 46, 34, 15].contains(event.keyCode) { return false }
-        // Option+Cmd+V types the Mac clipboard on the remote machine.
-        if flags.subtracting([.capsLock, .numericPad, .function]) == [.command, .option], event.keyCode == 9 {
+        // Option+Cmd+V types the Mac clipboard on the remote machine; with Shift, formatted for code editors.
+        let pasteFlags = flags.subtracting([.capsLock, .numericPad, .function])
+        if pasteFlags == [.command, .option] || pasteFlags == [.command, .option, .shift], event.keyCode == 9 {
             if !event.isARepeat {
-                // Let go of Option and Command on the remote first, or they'd modify the typed text.
+                // Let go of the modifiers on the remote first, or they'd modify the typed text.
                 releaseKeys()
-                model.pasteClipboard()
+                model.pasteClipboard(pasteFlags.contains(.shift) ? .formatted : .plain)
             }
             return true
         }

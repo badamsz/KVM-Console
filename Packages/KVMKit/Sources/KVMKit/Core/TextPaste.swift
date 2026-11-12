@@ -39,6 +39,94 @@ public enum TextPaste {
     }
 }
 
+/// One thing to do while typing pasted text.
+public enum PasteStep: Equatable, Sendable {
+    /// Type these characters (a newline is Enter).
+    case text(String)
+    /// Empty the line the cursor is on, removing the indent an editor added
+    /// after the Enter just typed. See `TextPaste.formattedSteps`.
+    case clearLine
+}
+
+extension TextPaste {
+    /// Typed on a fresh line before clearing it, so the line is never empty
+    /// when it's selected: the selection always holds at least this
+    /// character, and Backspace removes the selection rather than joining
+    /// the line onto the one above.
+    public static let lineSentinel = "x"
+
+    /// Plain paste: the text as it is.
+    public static func plainSteps(_ text: String) -> [PasteStep] {
+        text.isEmpty ? [] : [.text(text)]
+    }
+
+    /// Formatted paste, for editors that indent a new line to match the one
+    /// above (VS Code, JetBrains, Xcode, Sublime). Typing text with its own
+    /// indentation there indents every line twice. So after each Enter the
+    /// line is cleared first, and then the next line is typed with its own
+    /// indentation, which leaves the result exactly as it was copied. The
+    /// first line is typed as it is, where the cursor already is.
+    /// Whitespace-only lines are left empty.
+    public static func formattedSteps(_ text: String) -> [PasteStep] {
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.count > 1 else { return plainSteps(text) }
+        var steps: [PasteStep] = []
+        var pending = String(lines[0])
+        for line in lines.dropFirst() {
+            pending += "\n"
+            steps.append(.text(pending))
+            steps.append(.clearLine)
+            pending = line.allSatisfy { $0 == " " || $0 == "\t" } ? "" : String(line)
+        }
+        if !pending.isEmpty { steps.append(.text(pending)) }
+        return steps
+    }
+
+    public static func steps(_ text: String, mode: PasteMode) -> [PasteStep] {
+        switch mode {
+        case .plain: return plainSteps(text)
+        case .formatted: return formattedSteps(text)
+        }
+    }
+}
+
+/// How pasted text is typed.
+public enum PasteMode: String, CaseIterable, Identifiable, Sendable {
+    /// Every character as it is.
+    case plain
+    /// Each line's indent replaces the one an editor adds after Enter.
+    case formatted
+
+    public var id: String { rawValue }
+}
+
+/// The shortcut that selects back to the start of the line on the remote
+/// machine, used by formatted paste. Pressed twice: editors with "smart
+/// home" go to the first non-blank character first, then to the start.
+public enum LineStartKey: String, CaseIterable, Identifiable, Sendable {
+    /// Shift+Home, on Windows and Linux.
+    case home
+    /// Shift+Command+Left Arrow, on a Mac.
+    case commandLeft
+
+    public var id: String { rawValue }
+
+    /// Web `KeyboardEvent.code`s, pressed in order and released in reverse.
+    public var selectCombo: [String] {
+        switch self {
+        case .home: return ["ShiftLeft", "Home"]
+        case .commandLeft: return ["ShiftLeft", "MetaLeft", "ArrowLeft"]
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .home: return "Windows or Linux (Shift+Home)"
+        case .commandLeft: return "macOS (Shift+Command+Left)"
+        }
+    }
+}
+
 /// How fast pasted text is typed.
 public enum TypingRate: String, CaseIterable, Identifiable, Sendable {
     case fastest, fast, normal, slow, verySlow

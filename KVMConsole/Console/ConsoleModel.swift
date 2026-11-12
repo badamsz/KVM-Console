@@ -111,6 +111,13 @@ final class ConsoleModel {
     var pasteProgress: PasteProgress?
     /// Clipboard text waiting for the user to confirm.
     var pendingPaste: String?
+    /// How `pendingPaste` will be typed.
+    var pendingPasteMode: PasteMode = .plain
+    /// The remote machine's select-to-line-start shortcut, for formatted
+    /// paste. Shared by all consoles.
+    var lineStartKey = LineStartKey(rawValue: UserDefaults.standard.string(forKey: "console.lineStartKey") ?? "") ?? .home {
+        didSet { UserDefaults.standard.set(lineStartKey.rawValue, forKey: "console.lineStartKey") }
+    }
     /// How fast pasted text is typed. Shared by all consoles.
     var typingRate = TypingRate(rawValue: UserDefaults.standard.string(forKey: "console.typingRate") ?? "") ?? .normal {
         didSet { UserDefaults.standard.set(typingRate.rawValue, forKey: "console.typingRate") }
@@ -500,7 +507,8 @@ final class ConsoleModel {
 
     /// Reads the Mac clipboard and types it on the remote machine. Long or
     /// multi-line text is held in `pendingPaste` for confirmation first.
-    func pasteClipboard() {
+    /// `.formatted` is for code editors that indent new lines themselves.
+    func pasteClipboard(_ mode: PasteMode = .plain) {
         guard pasteProgress == nil else { return }
         guard let raw = NSPasteboard.general.string(forType: .string) else {
             app?.lastError = "The clipboard has no text to paste."
@@ -512,29 +520,29 @@ final class ConsoleModel {
             return
         }
         if text.count > 200 || text.contains("\n") {
+            pendingPasteMode = mode
             pendingPaste = text
         } else {
-            typeText(text)
+            typeText(text, mode: mode)
         }
     }
 
     /// Types `text` on the remote machine at the chosen typing rate.
-    func typeText(_ text: String) {
+    func typeText(_ text: String, mode: PasteMode = .plain) {
         pendingPaste = nil
         guard pasteProgress == nil, let input else { return }
-        let pieces = input.pastePieces(text)
+        let steps = TextPaste.steps(text, mode: mode)
         let total = text.count
         let rate = typingRate
+        let lineStart = lineStartKey
         pasteProgress = PasteProgress(typed: 0, total: total)
         pasteTask = Task { [weak self] in
             var typed = 0
             var skipped = 0
             do {
-                for piece in pieces {
-                    try Task.checkCancellation()
-                    skipped += try await input.type(piece, rate: rate)
-                    typed += piece.count
-                    self?.pasteProgress = PasteProgress(typed: typed, total: total)
+                skipped = try await ConsoleModel.run(steps, on: input, rate: rate, lineStart: lineStart) { count in
+                    typed = count
+                    self?.pasteProgress = PasteProgress(typed: count, total: total)
                 }
             } catch is CancellationError {
             } catch {
@@ -553,22 +561,50 @@ final class ConsoleModel {
 
     /// Types `text` and returns when it's done, for the MCP server. Shows the
     /// same progress as a paste. Returns how many characters couldn't be typed.
-    func typeTextAndWait(_ text: String) async throws -> (skipped: Int, limitation: String) {
+    func typeTextAndWait(_ text: String, mode: PasteMode = .plain) async throws -> (skipped: Int, limitation: String) {
         guard pasteProgress == nil else { throw KVMDError.api("Text is already being typed on this machine. Try again when it's done.") }
         guard let input else { throw KVMDError.api("The console isn't connected.") }
-        let pieces = input.pastePieces(text)
         let total = text.count
         pasteProgress = PasteProgress(typed: 0, total: total)
         defer { pasteProgress = nil }
-        var typed = 0
-        var skipped = 0
-        for piece in pieces {
-            try Task.checkCancellation()
-            skipped += try await input.type(piece, rate: typingRate)
-            typed += piece.count
-            pasteProgress = PasteProgress(typed: typed, total: total)
+        let skipped = try await ConsoleModel.run(TextPaste.steps(text, mode: mode), on: input, rate: typingRate, lineStart: lineStartKey) { count in
+            self.pasteProgress = PasteProgress(typed: count, total: total)
         }
         return (skipped, input.pasteLimitation)
+    }
+
+    /// Types the steps of a paste, calling `progress` with the number of
+    /// characters typed so far. Returns how many couldn't be typed.
+    private static func run(_ steps: [PasteStep], on input: any ConsoleInput, rate: TypingRate, lineStart: LineStartKey,
+                            progress: (Int) -> Void) async throws -> Int {
+        var typed = 0
+        var skipped = 0
+        // Every backend returns once its text is typed, but give the device a
+        // moment between typed text and separate key presses so they stay in order.
+        let settle = UInt64(max(rate.delay * 2, 0.03) * 1_000_000_000)
+        for step in steps {
+            switch step {
+            case .text(let text):
+                for piece in input.pastePieces(text) {
+                    try Task.checkCancellation()
+                    skipped += try await input.type(piece, rate: rate)
+                    typed += piece.count
+                    progress(typed)
+                }
+            case .clearLine:
+                // Type a character so the line isn't blank, select back to the
+                // start of the line (twice, for editors where the first press
+                // stops at the indent), and delete the selection.
+                try Task.checkCancellation()
+                _ = try await input.type(TextPaste.lineSentinel, rate: rate)
+                for combo in [lineStart.selectCombo, lineStart.selectCombo, ["Backspace"]] {
+                    try await Task.sleep(nanoseconds: settle)
+                    input.combo(combo)
+                }
+                try await Task.sleep(nanoseconds: settle)
+            }
+        }
+        return skipped
     }
 
     /// Stops a paste in progress. Characters already sent to the device

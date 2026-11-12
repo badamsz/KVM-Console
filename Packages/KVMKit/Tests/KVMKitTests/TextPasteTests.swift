@@ -17,6 +17,42 @@ final class TextPasteTests: XCTestCase {
         XCTAssertTrue(chunks.allSatisfy { $0.count <= TextPaste.chunkSize })
     }
 
+    func testPlainStepsKeepText() {
+        XCTAssertEqual(TextPaste.steps("a\n    b", mode: .plain), [.text("a\n    b")])
+        XCTAssertEqual(TextPaste.steps("", mode: .plain), [])
+    }
+
+    func testFormattedStepsClearEachNewLine() {
+        let code = "if x:\n    y = 1\n\n    \nz"
+        XCTAssertEqual(TextPaste.steps(code, mode: .formatted), [
+            .text("if x:\n"), .clearLine,
+            .text("    y = 1\n"), .clearLine,
+            .text("\n"), .clearLine,
+            .text("\n"), .clearLine,
+            .text("z"),
+        ])
+    }
+
+    func testFormattedStepsSingleLineAndTrailingNewline() {
+        XCTAssertEqual(TextPaste.formattedSteps("  one line"), [.text("  one line")])
+        XCTAssertEqual(TextPaste.formattedSteps("a\n"), [.text("a\n"), .clearLine])
+        XCTAssertEqual(TextPaste.formattedSteps("\ta\n\tb"), [.text("\ta\n"), .clearLine, .text("\tb")])
+    }
+
+    func testFormattedStepsTypeEveryCharacter() {
+        let code = "func f() {\n\tif a {\n\t\tb()\n\t}\n}"
+        let typed = TextPaste.formattedSteps(code).compactMap { step -> String? in
+            if case .text(let text) = step { return text }
+            return nil
+        }.joined()
+        XCTAssertEqual(typed, code)
+    }
+
+    func testLineStartKeys() {
+        XCTAssertEqual(LineStartKey.home.selectCombo, ["ShiftLeft", "Home"])
+        XCTAssertEqual(LineStartKey.commandLeft.selectCombo, ["ShiftLeft", "MetaLeft", "ArrowLeft"])
+    }
+
     func testTypingRatesGetSlower() {
         let delays = TypingRate.allCases.map(\.delay)
         XCTAssertEqual(delays, delays.sorted())
