@@ -50,6 +50,12 @@ final class AppModel {
     /// until they are unplugged.
     @ObservationIgnored private var dismissedUnits: Set<String> = []
     @ObservationIgnored private var usbWatch: Task<Void, Never>?
+    /// Console windows open now, by machine. Held weakly; the window owns its console.
+    @ObservationIgnored private var consoles: [TargetSelection: WeakConsole] = [:]
+    /// Opens windows from outside a view (the MCP server). Set by the first main window.
+    @ObservationIgnored private(set) var openWindowAction: OpenWindowAction?
+    /// The MCP server that lets AI agents use the app. Off unless turned on in Settings.
+    let mcp: MCPController
 
     private let store: DeviceStore
     let credentials: CredentialStore
@@ -57,11 +63,13 @@ final class AppModel {
     init(store: DeviceStore = DeviceStore(fileURL: DeviceStore.defaultURL), credentials: CredentialStore = CredentialStore()) {
         self.store = store
         self.credentials = credentials
+        self.mcp = MCPController(credentials: credentials)
         do {
             devices = try store.load()
         } catch { lastError = "Couldn't load devices: \(error.localizedDescription)" }
         refreshUSB()
         watchUSB()
+        mcp.attach(to: self)
     }
 
     /// The devices the sidebar lists: USB KVMs only while plugged in, unless
@@ -144,6 +152,7 @@ final class AppModel {
     func device(_ id: UUID) -> Device? { devices.first { $0.id == id } }
 
     func installStatusItem(openWindow: OpenWindowAction, visible: Bool) {
+        if openWindowAction == nil { openWindowAction = openWindow }
         if statusItem == nil {
             statusItem = StatusItemController(app: self, openWindow: openWindow)
         }
@@ -162,6 +171,34 @@ final class AppModel {
         Task {
             do { try await session.activate(target) } catch { lastError = error.localizedDescription }
         }
+        return true
+    }
+
+    // MARK: Consoles
+
+    private struct WeakConsole {
+        weak var model: ConsoleModel?
+    }
+
+    func consoleOpened(_ console: ConsoleModel) {
+        consoles[console.selection] = WeakConsole(model: console)
+    }
+
+    func consoleClosed(_ console: ConsoleModel) {
+        if consoles[console.selection]?.model === console { consoles[console.selection] = nil }
+    }
+
+    /// The console window open for a machine, if there is one.
+    func console(for selection: TargetSelection) -> ConsoleModel? {
+        consoles[selection]?.model
+    }
+
+    /// Opens (or brings forward) a machine's console window. False when no
+    /// window has been shown yet to open it from.
+    @discardableResult
+    func openConsole(_ selection: TargetSelection) -> Bool {
+        guard let openWindowAction else { return false }
+        openWindowAction(value: selection)
         return true
     }
 

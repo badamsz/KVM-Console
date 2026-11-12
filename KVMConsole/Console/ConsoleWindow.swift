@@ -20,10 +20,12 @@ struct ConsoleWindow: View {
             if model == nil {
                 let m = ConsoleModel(selection: selection, app: app)
                 model = m
+                app.consoleOpened(m)
                 m.start()
             }
         }
         .onDisappear {
+            if let model { app.consoleClosed(model) }
             model?.stop()
             model = nil
         }

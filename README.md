@@ -85,6 +85,7 @@ The workflow calls `scripts/ci/package.sh` to sign, notarize and package the app
   - `DeviceSession.swift`: one connected device's observable state (ATX, Switch, virtual media, previews). It has no per-device branches; it talks to a `DeviceBackend`.
   - `Backends/`: one `DeviceBackend` per kind of device (`PiKVMBackend`, `NanoKVMBackend`, `OpenterfaceBackend`). `DeviceBackends.connect` is the one place that maps a device family to its backend.
   - `Console/`: the console window. `ConsoleModel` drives video and talks to a `ConsoleInput` for keyboard, mouse and paste (`KVMDConsoleInput`, `NanoKVMConsoleLink`, `OpenterfaceConsoleLink`).
+  - `MCP/`: the MCP server for AI agents. `MCPController` runs it and keeps its settings, `MCPToolRunner` carries out tool calls through the same sessions and consoles the windows use, and `MCPConfirmer` asks before power actions.
   - `Views/`, `Discovery/`, `Help/`, `Openterface/` (USB capture and serial).
 - `Packages/KVMKit/`: everything that doesn't need the UI, with tests.
   - `Core/`: models (`Device`, `DeviceModel`, `DeviceFamily` and its feature profile), Keychain and JSON storage, certificate pinning, HID reports, paste.
@@ -93,6 +94,7 @@ The workflow calls `scripts/ci/package.sh` to sign, notarize and package the app
   - `Openterface/`: the CH9329 serial protocol.
   - `Streaming/`: MJPEG and direct H.264 decoding.
   - `Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API.
+  - `MCP/`: the loopback HTTP server, the MCP JSON-RPC endpoint with its access checks, the tool definitions (`KVMTool`) and key combination parsing.
 
 ### Adding a kind of device
 
@@ -112,7 +114,7 @@ Both run on Monday mornings and label their pull requests `dependencies`.
 
 ## Help
 
-**Help > KVM Console Help** (⌘?) opens a help window with topics on adding and finding devices, the console, mouse modes, virtual media, power control, the PiKVM Switch, NanoKVM, Openterface, configuring and updating a PiKVM, certificates (including your own CA), shortcuts and troubleshooting. Typing in the Help menu's search field lists matching topics too, and sheets such as the device editor and virtual media have a **?** button that opens the relevant topic. The text lives in `KVMConsole/Help/HelpTopics.swift`; update it along with this README when features change.
+**Help > KVM Console Help** (⌘?) opens a help window with topics on adding and finding devices, the console, mouse modes, virtual media, power control, the PiKVM Switch, NanoKVM, Openterface, configuring and updating a PiKVM, certificates (including your own CA), AI agents (MCP), shortcuts and troubleshooting. Typing in the Help menu's search field lists matching topics too, and sheets such as the device editor and virtual media have a **?** button that opens the relevant topic. The text lives in `KVMConsole/Help/HelpTopics.swift`; update it along with this README when features change.
 
 ## Finding devices on the network
 
@@ -189,6 +191,17 @@ Every save goes through the same steps on the device: kvmd validates the new fil
 **Update PiKVM OS…** (toolbar, or right-click a device) runs `pikvm-update` through the PiKVM's web terminal, so it works over the same HTTPS connection as everything else and needs no SSH access. It asks for the device's root password, which can be saved in the Keychain. The update is started detached from the terminal and its log is followed, so a dropped connection or closing the window doesn't interrupt it. The PiKVM reboots itself when updates were installed.
 
 Requires the web terminal (`kvmd-webterm`), which PiKVM OS enables by default.
+
+## AI agents (MCP)
+
+**Settings > AI Agents** turns on a [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude Code, Claude Desktop or another MCP client on the same Mac can see and control machines. It is off by default.
+
+- **Transport**: Streamable HTTP at `http://127.0.0.1:47823/mcp` (the port can be changed). Each POST carries one JSON-RPC message and gets a JSON answer; there is no event stream.
+- **Access**: the server binds to the loopback address only, and every request needs `Authorization: Bearer <token>`. The token is made on first use, kept in the Keychain, and can be replaced in Settings. Requests whose `Host` or `Origin` isn't local are refused, which stops DNS rebinding from a web page.
+- **Tools**: `list_machines`, `get_machine_status` and `take_screenshot` are always offered. `switch_to_machine`, `type_text`, `press_keys`, `mount_image`, `eject_image` and `power` are offered only while **Allow control** is on (off by default). Agents can't upload, delete or download images, edit devices or change settings.
+- **Power** actions always show an alert on the Mac first; Return picks Don't Allow, and an unanswered alert times out after two minutes as a refusal.
+- Keyboard tools go through the machine's console window, opening it if needed, so what an agent types is visible. Behind a PiKVM Switch, tools that use the screen, keyboard or virtual drive refuse to act unless the machine's port is active.
+- Settings lists recent requests and has copyable setup for Claude Code (`claude mcp add --transport http …`) and Claude Desktop (through `mcp-remote`).
 
 ## Notes
 

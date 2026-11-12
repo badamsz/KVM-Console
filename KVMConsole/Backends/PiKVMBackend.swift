@@ -114,6 +114,11 @@ final class PiKVMBackend: DeviceBackend {
         try NSImage.snapshot(try await client.snapshot())
     }
 
+    /// kvmd scales the picture down to fit; the default fits a thumbnail.
+    func screenshot() async throws -> NSImage {
+        try NSImage.snapshot(try await client.snapshot(maxWidth: 1920, maxHeight: 1200))
+    }
+
     // MARK: Virtual media
 
     var canUploadImages: Bool { true }

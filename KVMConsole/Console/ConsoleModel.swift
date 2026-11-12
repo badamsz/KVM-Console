@@ -551,6 +551,26 @@ final class ConsoleModel {
         }
     }
 
+    /// Types `text` and returns when it's done, for the MCP server. Shows the
+    /// same progress as a paste. Returns how many characters couldn't be typed.
+    func typeTextAndWait(_ text: String) async throws -> (skipped: Int, limitation: String) {
+        guard pasteProgress == nil else { throw KVMDError.api("Text is already being typed on this machine. Try again when it's done.") }
+        guard let input else { throw KVMDError.api("The console isn't connected.") }
+        let pieces = input.pastePieces(text)
+        let total = text.count
+        pasteProgress = PasteProgress(typed: 0, total: total)
+        defer { pasteProgress = nil }
+        var typed = 0
+        var skipped = 0
+        for piece in pieces {
+            try Task.checkCancellation()
+            skipped += try await input.type(piece, rate: typingRate)
+            typed += piece.count
+            pasteProgress = PasteProgress(typed: typed, total: total)
+        }
+        return (skipped, input.pasteLimitation)
+    }
+
     /// Stops a paste in progress. Characters already sent to the device
     /// (up to one small piece) are still typed.
     func cancelPaste() {
