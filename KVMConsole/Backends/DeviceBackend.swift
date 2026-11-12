@@ -49,6 +49,9 @@ protocol DeviceBackend: AnyObject {
 
     /// A still picture of the screen.
     func snapshot() async throws -> NSImage
+    /// A picture of the screen large enough to read text on, for AI agents
+    /// (see `MCPToolRunner`). Defaults to `snapshot()`.
+    func screenshot() async throws -> NSImage
 
     // Virtual media
     /// Whether images can be uploaded from this Mac right now.
@@ -80,6 +83,7 @@ extension DeviceBackend {
     func applyMouseMode(_ mode: MouseMode, hid: HIDState?) async throws {}
     func power(_ action: ATXPowerAction, switchPort: Int?, poweredOn: Bool?) async throws {}
     func click(_ button: ATXButton, switchPort: Int?) async throws {}
+    func screenshot() async throws -> NSImage { try await snapshot() }
     var canUploadImages: Bool { false }
     func storedImageName(for fileName: String) -> String { fileName }
     func uploadProblem(for fileName: String) -> String? { nil }

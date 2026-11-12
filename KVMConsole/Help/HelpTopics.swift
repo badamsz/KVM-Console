@@ -7,7 +7,7 @@ extension HelpTopic {
     static let all: [HelpTopic] = [
         gettingStarted, addingDevices, findingDevices, console, keyboardAndMouse,
         virtualMedia, power, pikvmSwitch, nanoKVM, openterface, configuringPiKVM,
-        updatingPiKVM, certificates, menuBar, shortcuts, troubleshooting,
+        updatingPiKVM, certificates, menuBar, aiAgents, shortcuts, troubleshooting,
     ]
 
     static let gettingStarted = HelpTopic(
@@ -326,6 +326,39 @@ extension HelpTopic {
 
         ## Settings
         **KVM Console > Settings…** (⌘,) has two options: showing the menu bar item, and hiding the console toolbar in full screen.
+        """)
+
+    static let aiAgents = HelpTopic(
+        "ai-agents", title: "AI Agents (MCP)", symbol: "sparkles",
+        keywords: ["mcp", "model context protocol", "claude", "claude code", "claude desktop", "agent", "ai", "automation", "token", "llm"],
+        body: """
+        KVM Console can let an AI agent, such as Claude Code or Claude Desktop, see and control your machines through the Model Context Protocol (MCP). An agent can, for example, watch a machine's screen while it installs an operating system, press keys in a BIOS menu, or mount an ISO image.
+
+        ## Turning it on
+        1. Open **KVM Console > Settings…** (⌘,) and choose **AI Agents**.
+        2. Turn on **Let AI agents use KVM Console**. The status line shows the address the server listens on.
+        3. Under **Connect a client**, press **Copy** next to your client and paste it: run the Claude Code command in Terminal, or add the Claude Desktop lines to its `claude_desktop_config.json` and restart Claude Desktop.
+
+        The server is off until you turn it on. It listens on 127.0.0.1 only, so other computers can't reach it, and it refuses requests without the token shown in Settings. Web pages can't reach it either. Press **New…** next to the token to make a new one; clients using the old token stop working.
+
+        ## What agents can do
+        With **Allow control** off, agents can only look:
+        - **list_machines**: the devices and machines set up in the app.
+        - **get_machine_status**: power and disk lights, the active Switch port, and the virtual drive with its stored images.
+        - **take_screenshot**: a picture of the machine's screen.
+
+        Turn on **Allow control** to let them act as well:
+        - **switch_to_machine**: make a machine's PiKVM Switch port active.
+        - **type_text** and **press_keys**: type text, or press keys and combinations such as Ctrl+Alt+Delete or F2.
+        - **mount_image** and **eject_image**: connect an image already stored on the KVM, or disconnect the drive. Agents can't upload or delete images.
+        - **power**: power on, shut down, reset or force off.
+
+        > Every power action asks you first, in an alert on this Mac. Return picks **Don't Allow**. If nobody answers within two minutes, nothing happens.
+
+        Keyboard input opens the machine's console window, so you can watch what the agent types. Behind a PiKVM Switch, the screen, keyboard and virtual drive belong to the active port; the tools refuse to act on a machine that isn't on screen rather than reach the wrong one.
+
+        ## Keeping an eye on it
+        **Recent requests** in the AI Agents settings lists what agents asked for and whether it worked. Turning the server off stops every agent at once.
         """)
 
     static let shortcuts = HelpTopic(

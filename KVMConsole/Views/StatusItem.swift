@@ -200,6 +200,18 @@ private final class ActionMenuItem: NSMenuItem {
 
 /// The app's Settings window.
 struct SettingsView: View {
+    var body: some View {
+        TabView {
+            GeneralSettingsView()
+                .tabItem { Label("General", systemImage: "gearshape") }
+            MCPSettingsView()
+                .frame(width: 560, height: 620)
+                .tabItem { Label("AI Agents", systemImage: "sparkles") }
+        }
+    }
+}
+
+private struct GeneralSettingsView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(AppPreferences.showMenuBarExtraKey) private var showMenuBarExtra = true
     @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
