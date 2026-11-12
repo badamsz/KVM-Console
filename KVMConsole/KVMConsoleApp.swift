@@ -45,7 +45,7 @@ struct KVMConsoleApp: App {
 struct AppCommands: Commands {
     let model: AppModel
     @Environment(\.openWindow) private var openWindow
-    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
+    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = false
 
     var body: some Commands {
         // Acts on the console window in front. The buttons look the console up when

@@ -36,7 +36,7 @@ private struct ConsoleContent: View {
     @Environment(AppModel.self) private var app
     let model: ConsoleModel
     @State private var pendingPower: PowerCommand?
-    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
+    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = false
     @State private var powerActionRunning = false
 
     var body: some View {
@@ -67,7 +67,7 @@ private struct ConsoleContent: View {
         .navigationTitle(model.target?.name ?? "Console")
         .navigationSubtitle(subtitle)
         .sheet(isPresented: Binding(get: { model.showingMedia }, set: { model.showingMedia = $0 })) { VirtualMediaView(deviceID: model.selection.deviceID).environment(app) }
-        // In full screen the video can have the whole display; View > Hide Toolbar in Full Screen turns this off.
+        // The toolbar stays in full screen by default; View > Hide Toolbar in Full Screen gives the video the whole display.
         .toolbar(model.isFullScreen && hideToolbarInFullScreen ? .hidden : .automatic, for: .windowToolbar)
         .toolbar {
             ToolbarItemGroup {

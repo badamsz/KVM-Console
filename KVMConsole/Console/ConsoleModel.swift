@@ -25,7 +25,7 @@ enum ConsolePreferences {
     private static let videoModeKey = "console.videoMode"
     private static let volumeKey = "console.volume"
     private static let mutedKey = "console.muted"
-    /// Whether the toolbar is hidden while a console is in full screen. On unless turned off.
+    /// Whether the toolbar is hidden while a console is in full screen. Off (toolbar shown) unless turned on.
     static let hideToolbarInFullScreenKey = "console.hideToolbarInFullScreen"
 
     static var videoMode: VideoMode {
