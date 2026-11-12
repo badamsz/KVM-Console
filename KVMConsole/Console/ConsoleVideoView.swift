@@ -1,6 +1,6 @@
 import AppKit
 import AVFoundation
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 /// SwiftUI wrapper for the console's video and input view.

@@ -1,5 +1,5 @@
 import AVFoundation
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 /// Find Devices: lists KVMs found with Bonjour, a subnet scan or Tailscale,

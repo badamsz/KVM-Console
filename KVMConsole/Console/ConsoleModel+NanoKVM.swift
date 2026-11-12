@@ -1,13 +1,13 @@
 import AppKit
 import Foundation
-import PiKVMKit
+import KVMKit
 
 /// The console's connection to a Sipeed NanoKVM, NanoKVM Pro or NanoKVM Go:
 /// MJPEG video from `/api/stream/mjpeg` (or, on firmware without it, H.264
 /// from `/api/stream/h264/direct`), and keyboard and mouse as standard USB
 /// HID reports on the `/api/ws` socket.
 @MainActor
-final class NanoKVMConsoleLink {
+final class NanoKVMConsoleLink: ConsoleInput {
     let client: NanoKVMClient
     let socket: URLSessionWebSocketTask
     let transport: NanoKVMClient.VideoTransport
@@ -143,12 +143,24 @@ final class NanoKVMConsoleLink {
     }
 
     /// Positive `dy` scrolls up. Boot mice have no horizontal wheel.
-    func mouseWheel(dy: Int, mode: MouseMode) {
+    func mouseWheel(dx: Int, dy: Int, mode: MouseMode) {
         guard dy != 0 else { return }
         switch mode {
         case .absolute: sendAbsolute(wheel: dy)
         case .relative: sendRelative(dx: 0, dy: 0, wheel: dy)
         }
+    }
+
+    // MARK: Paste
+
+    /// Through the NanoKVM's paste API, which uses a US keyboard layout.
+    func pastePieces(_ text: String) -> [String] {
+        TextPaste.chunks(text, size: NanoKVMClient.pasteChunkSize)
+    }
+
+    func type(_ piece: String, rate: TypingRate) async throws -> Int {
+        try await client.paste(piece)
+        return 0
     }
 }
 
@@ -172,6 +184,7 @@ extension ConsoleModel {
             }
             let link = try NanoKVMConsoleLink(client: client, transport: transport)
             nano = link
+            input = link
             socket = link.socket
             link.start()
             startNanoKVMVideo(link, generation: gen)
@@ -231,32 +244,6 @@ extension ConsoleModel {
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             self?.startNanoKVMVideo(link, generation: gen)
-        }
-    }
-
-    /// Types text through the NanoKVM's paste API, which uses a US keyboard layout.
-    func typeTextOnNanoKVM(_ text: String, client: NanoKVMClient) {
-        guard pasteProgress == nil else { return }
-        let chunks = TextPaste.chunks(text, size: NanoKVMClient.pasteChunkSize)
-        let total = text.count
-        pasteProgress = PasteProgress(typed: 0, total: total)
-        pasteTask = Task { [weak self] in
-            var typed = 0
-            do {
-                for chunk in chunks {
-                    try Task.checkCancellation()
-                    try await client.paste(chunk)
-                    typed += chunk.count
-                    self?.pasteProgress = PasteProgress(typed: typed, total: total)
-                }
-            } catch is CancellationError {
-            } catch {
-                if !Task.isCancelled {
-                    self?.app?.lastError = "Paste stopped after \(typed) of \(total) characters: \(error.localizedDescription)"
-                }
-            }
-            self?.pasteProgress = nil
-            self?.pasteTask = nil
         }
     }
 }

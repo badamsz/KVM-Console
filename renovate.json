@@ -1,9 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate updates Swift packages only. GitHub Actions are Dependabot's job (.github/dependabot.yml), so the two never open the same pull request.",
   "extends": [
     "config:recommended",
-    ":semanticCommitsDisabled",
-    "helpers:pinGitHubActionDigests"
+    ":semanticCommitsDisabled"
+  ],
+  "enabledManagers": [
+    "swift",
+    "xcodegen"
   ],
   "timezone": "America/New_York",
   "schedule": [
@@ -11,7 +15,8 @@
   ],
   "prConcurrentLimit": 5,
   "labels": [
-    "dependencies"
+    "dependencies",
+    "swift"
   ],
   "vulnerabilityAlerts": {
     "labels": [
@@ -24,11 +29,7 @@
   },
   "packageRules": [
     {
-      "description": "Swift packages (Package.swift and XcodeGen project.yml): one weekly PR for minor/patch updates.",
-      "matchManagers": [
-        "swift",
-        "xcodegen"
-      ],
+      "description": "Minor and patch updates: one weekly pull request.",
       "matchUpdateTypes": [
         "minor",
         "patch"
@@ -36,22 +37,23 @@
       "groupName": "Swift packages"
     },
     {
-      "description": "Swift package major updates get their own PR and need approval on the Dependency Dashboard.",
-      "matchManagers": [
-        "swift",
-        "xcodegen"
-      ],
+      "description": "Major updates get their own pull request and need approval on the Dependency Dashboard.",
       "matchUpdateTypes": [
         "major"
       ],
       "dependencyDashboardApproval": true
     },
     {
-      "description": "GitHub Actions: group all updates into one PR.",
-      "matchManagers": [
-        "github-actions"
+      "description": "stasel/WebRTC versions follow Chromium milestones (157.0.0, 158.0.0, ...), so every release is a major. Treat them as routine updates instead of waiting for approval.",
+      "matchPackageNames": [
+        "https://github.com/stasel/WebRTC",
+        "stasel/WebRTC"
       ],
-      "groupName": "GitHub Actions"
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": false,
+      "groupName": "WebRTC"
     }
   ]
 }

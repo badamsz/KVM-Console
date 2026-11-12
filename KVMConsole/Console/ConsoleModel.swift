@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 import Observation
-import PiKVMKit
+import KVMKit
 
 /// How the console receives video.
 enum VideoMode: String, CaseIterable, Identifiable {
@@ -130,6 +130,8 @@ final class ConsoleModel {
     private var frameCount = 0
     private var fpsWindowStart = Date()
     var generation = 0
+    /// Where keyboard, mouse and paste go while connected.
+    var input: (any ConsoleInput)?
     /// Set while connected to a Sipeed NanoKVM, which takes standard HID
     /// reports instead of kvmd's key names. See `ConsoleModel+NanoKVM.swift`.
     var nano: NanoKVMConsoleLink?
@@ -148,7 +150,7 @@ final class ConsoleModel {
 
     /// Whether the user can pick between H.264 and MJPEG. Sipeed devices
     /// offer only one: MJPEG on the NanoKVM and Pro, H.264 on the Go.
-    var canChooseVideoMode: Bool { (device?.family ?? .pikvm) == .pikvm }
+    var canChooseVideoMode: Bool { device?.family.supportsVideoModeChoice ?? false }
     var mouseMode: MouseMode { target?.mouseMode ?? .absolute }
 
     // MARK: Lifecycle
@@ -176,6 +178,7 @@ final class ConsoleModel {
 
     func teardown() {
         generation += 1
+        input = nil
         nano?.stop()
         nano = nil
         local?.stop()
@@ -255,16 +258,21 @@ final class ConsoleModel {
         if frame == nil, webRTCView == nil { state = .connecting }
         let session = app.session(for: selection.deviceID)
         await session.connectIfNeeded()
-        if let nanoClient = session.nanoClient {
-            return await runNanoKVMOnce(nanoClient)
-        }
-        if let unit = session.localUnit {
-            return await runOpenterfaceOnce(unit)
-        }
-        guard let client = session.client else {
+        switch session.backend {
+        case let nano as NanoKVMBackend:
+            return await runNanoKVMOnce(nano.client)
+        case let openterface as OpenterfaceBackend:
+            return await runOpenterfaceOnce(openterface.unit)
+        case let pikvm as PiKVMBackend:
+            return await runPiKVMOnce(pikvm.client, session: session, target: target)
+        default:
             if case .failed(let message) = session.status { state = .failed(message) }
             return false
         }
+    }
+
+    /// Connects to a PiKVM's session socket and runs until it drops.
+    private func runPiKVMOnce(_ client: KVMDClient, session: DeviceSession, target: Target) async -> Bool {
 
         do {
             // Select this machine's switch port and apply its saved mouse mode.
@@ -280,6 +288,7 @@ final class ConsoleModel {
         do {
             let socket = try client.consoleSocket()
             self.socket = socket
+            input = KVMDConsoleInput(socket: socket, client: client)
             socket.resume()
 
             pingTask = Task { [weak socket] in
@@ -465,45 +474,26 @@ final class ConsoleModel {
 
     // MARK: Input
 
-    private func send(_ data: Data) {
-        guard let socket else { return }
-        socket.send(.data(data)) { _ in }
-    }
-
     func key(_ code: String, down: Bool) {
-        if let nano { nano.key(code, down: down); return }
-        if let local { local.key(code, down: down); return }
-        send(HIDMessage.key(code, down: down))
+        input?.key(code, down: down)
     }
 
     func mouseButton(_ button: MouseButton, down: Bool) {
-        if let nano { nano.mouseButton(button, down: down, mode: mouseMode); return }
-        if let local { local.mouseButton(button, down: down, mode: mouseMode); return }
-        send(HIDMessage.mouseButton(button, down: down))
+        input?.mouseButton(button, down: down, mode: mouseMode)
     }
 
     /// `point` is in video pixels with the origin at the top-left.
     func mouseMove(toVideoPoint point: CGPoint) {
-        if let nano { nano.mouseMove(toVideoPoint: point, videoSize: videoSize); return }
-        if let local { local.mouseMove(toVideoPoint: point, videoSize: videoSize); return }
-        guard let pos = HIDMessage.absolutePosition(x: point.x, y: point.y,
-                                                    videoWidth: videoSize.width, videoHeight: videoSize.height) else { return }
-        send(HIDMessage.mouseMove(x: pos.x, y: pos.y))
+        input?.mouseMove(toVideoPoint: point, videoSize: videoSize)
     }
 
     func mouseRelative(dx: Int, dy: Int) {
-        if let nano { nano.mouseRelative(dx: dx, dy: dy); return }
-        if let local { local.mouseRelative(dx: dx, dy: dy); return }
-        let steps = HIDMessage.splitDelta(dx: dx, dy: dy)
-        guard !steps.isEmpty else { return }
-        send(HIDMessage.mouseRelative(steps, squash: steps.count > 1))
+        input?.mouseRelative(dx: dx, dy: dy)
     }
 
     func mouseWheel(dx: Int, dy: Int) {
         guard dx != 0 || dy != 0 else { return }
-        if let nano { nano.mouseWheel(dy: dy, mode: mouseMode); return }
-        if let local { local.mouseWheel(dy: dy, mode: mouseMode); return }
-        send(HIDMessage.mouseWheel(dx: dx, dy: dy))
+        input?.mouseWheel(dx: dx, dy: dy, mode: mouseMode)
     }
 
     // MARK: Paste
@@ -531,47 +521,45 @@ final class ConsoleModel {
     /// Types `text` on the remote machine at the chosen typing rate.
     func typeText(_ text: String) {
         pendingPaste = nil
-        if let local {
-            typeTextOnOpenterface(text, link: local)
-            return
-        }
-        if let app, let nanoClient = app.session(for: selection.deviceID).nanoClient {
-            typeTextOnNanoKVM(text, client: nanoClient)
-            return
-        }
-        guard pasteProgress == nil, let app, let client = app.session(for: selection.deviceID).client else { return }
-        let chunks = TextPaste.chunks(text)
+        guard pasteProgress == nil, let input else { return }
+        let pieces = input.pastePieces(text)
         let total = text.count
-        let delay = typingRate.delay
+        let rate = typingRate
         pasteProgress = PasteProgress(typed: 0, total: total)
         pasteTask = Task { [weak self] in
             var typed = 0
+            var skipped = 0
             do {
-                for chunk in chunks {
+                for piece in pieces {
                     try Task.checkCancellation()
-                    try await client.typeText(chunk, delay: delay)
-                    typed += chunk.count
+                    skipped += try await input.type(piece, rate: rate)
+                    typed += piece.count
                     self?.pasteProgress = PasteProgress(typed: typed, total: total)
                 }
             } catch is CancellationError {
             } catch {
-                if !Task.isCancelled { app.lastError = "Paste stopped after \(typed) of \(total) characters: \(error.localizedDescription)" }
+                if !Task.isCancelled {
+                    self?.app?.lastError = "Paste stopped after \(typed) of \(total) characters: \(error.localizedDescription)"
+                }
+            }
+            if skipped > 0 {
+                let note = "\(skipped) character\(skipped == 1 ? "" : "s") couldn't be typed. " + input.pasteLimitation
+                self?.app?.lastError = note.trimmingCharacters(in: .whitespaces)
             }
             self?.pasteProgress = nil
             self?.pasteTask = nil
         }
     }
 
-    /// Stops a paste in progress. Characters already sent to the PiKVM
-    /// (up to one small chunk) are still typed.
+    /// Stops a paste in progress. Characters already sent to the device
+    /// (up to one small piece) are still typed.
     func cancelPaste() {
         pasteTask?.cancel()
     }
 
     /// Presses the keys in order, then releases them in reverse.
     func sendCombo(_ codes: [String]) {
-        for code in codes { key(code, down: true) }
-        for code in codes.reversed() { key(code, down: false) }
+        input?.combo(codes)
     }
 
     func setMouseMode(_ mode: MouseMode) {

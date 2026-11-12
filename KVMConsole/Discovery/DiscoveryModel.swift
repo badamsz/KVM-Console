@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import PiKVMKit
+import KVMKit
 
 /// Runs network discovery for the Find Devices window: Bonjour while the
 /// window is open, plus an on-demand subnet scan and Tailscale check.

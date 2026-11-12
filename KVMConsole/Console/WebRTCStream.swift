@@ -1,6 +1,6 @@
 import AppKit
 import AVFoundation
-import PiKVMKit
+import KVMKit
 import WebRTC
 
 /// Receives the PiKVM's H.264 video and Opus audio over WebRTC, using the

@@ -1,5 +1,5 @@
 import AppKit
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 /// Preference keys shared by the app's scenes.
@@ -99,24 +99,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         if let leds {
             sub.addItem(.separator())
-            sub.addItem(action("Power On", enabled: !leds.power) { [weak self] in
-                self?.run(target.name) { try await session.power(.on, for: target) }
-            })
-            sub.addItem(action("Shut Down", enabled: leds.power) { [weak self] in
-                self?.run(target.name) { try await session.power(.off, for: target) }
-            })
-            sub.addItem(action("Reset…") { [weak self] in
-                self?.confirm("Reset \(target.name)?", "This presses the reset button and may lose unsaved work.",
-                              button: "Reset", name: target.name) {
-                    try await session.click(.reset, for: target)
-                }
-            })
-            sub.addItem(action("Force Off…") { [weak self] in
-                self?.confirm("Force off \(target.name)?", "This holds the power button and may lose unsaved work.",
-                              button: "Force Off", name: target.name) {
-                    try await session.power(.offHard, for: target)
-                }
-            })
+            for command in PowerCommand.allCases {
+                sub.addItem(action(command.menuTitle, enabled: command.isEnabled(poweredOn: leds.power)) { [weak self] in
+                    if let confirmation = command.confirmation {
+                        self?.confirm(confirmation.title(target.name), confirmation.message,
+                                      button: command.title, name: target.name) {
+                            try await command.perform(on: session, for: target)
+                        }
+                    } else {
+                        self?.run(target.name) { try await command.perform(on: session, for: target) }
+                    }
+                })
+            }
         }
         item.submenu = sub
         return item
