@@ -3,6 +3,9 @@
 #
 #   scripts/release.sh             Signed with your development identity. For your own Macs.
 #   scripts/release.sh --notarize  Developer ID signed and notarized by Apple. For sharing.
+#   scripts/release.sh --app-store Signed for the Mac App Store and uploaded to App Store
+#                                  Connect (TestFlight) with the Apple ID in Xcode > Settings >
+#                                  Accounts. Set BUILD_NUMBER (default: a timestamp).
 #
 # Both need Config/Local.xcconfig with your DEVELOPMENT_TEAM (see "Building" in the README).
 # --notarize also needs a paid Apple Developer Program membership and stored
@@ -16,10 +19,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 NOTARIZE=0
+APP_STORE=0
 case "${1:-}" in
   "") ;;
   --notarize) NOTARIZE=1 ;;
-  *) echo "usage: scripts/release.sh [--notarize]" >&2; exit 2 ;;
+  --app-store) APP_STORE=1 ;;
+  *) echo "usage: scripts/release.sh [--notarize | --app-store]" >&2; exit 2 ;;
 esac
 
 SCHEME=KVMConsole
@@ -45,6 +50,48 @@ VERSION="${VERSION:-0.0.0}"
 
 rm -rf "$BUILD" dist
 mkdir -p "$BUILD" dist
+
+if [[ "$APP_STORE" == 1 ]]; then
+  # The build number must grow with every upload of the same version.
+  BUILD_NUMBER="${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M)}"
+  echo "==> Archiving $SCHEME $VERSION ($BUILD_NUMBER) for the App Store"
+  xcodebuild archive \
+    -project KVMConsole.xcodeproj \
+    -scheme "$SCHEME" \
+    -configuration Release \
+    -destination 'generic/platform=macOS' \
+    -archivePath "$BUILD/$SCHEME.xcarchive" \
+    CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+    -allowProvisioningUpdates
+
+  cat > "$BUILD/ExportOptions.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>upload</string>
+	<key>teamID</key>
+	<string>$TEAM_ID</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>
+PLIST
+
+  echo "==> Uploading to App Store Connect"
+  xcodebuild -exportArchive \
+    -archivePath "$BUILD/$SCHEME.xcarchive" \
+    -exportPath "$BUILD/appstore" \
+    -exportOptionsPlist "$BUILD/ExportOptions.plist" \
+    -allowProvisioningUpdates
+  echo "==> Uploaded $VERSION ($BUILD_NUMBER). It shows up in App Store Connect > TestFlight once processed."
+  exit 0
+fi
 
 echo "==> Archiving $SCHEME $VERSION"
 xcodebuild archive \

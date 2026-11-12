@@ -11,6 +11,14 @@
 #   NOTARY_API_KEY_P8_BASE64           App Store Connect API key (.p8), base64
 #   NOTARY_API_KEY_ID                  that key's ID
 #   NOTARY_API_ISSUER_ID               issuer ID shown above the keys list
+#
+# Mac App Store (app-store job; skipped until these exist; see AppStore/README.md):
+#   APPLE_TEAM_ID                      as above
+#   ASC_API_KEY_P8_BASE64              App Store Connect API key (.p8), base64, role Admin
+#   ASC_API_KEY_ID                     that key's ID
+#   ASC_API_ISSUER_ID                  issuer ID shown above the keys list
+# Tags v* upload to App Store Connect (TestFlight). A manual run exports the .pkg,
+# and uploads it too when "Upload to App Store Connect" is ticked.
 name: Release build
 
 on:
@@ -19,6 +27,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      app_store_upload:
+        description: Upload the App Store build to App Store Connect (TestFlight)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,6 +50,7 @@ jobs:
       WANT_NOTARY: ${{ secrets.NOTARY_API_KEY_P8_BASE64 != '' && secrets.NOTARY_API_KEY_ID != '' && secrets.NOTARY_API_ISSUER_ID != '' }}
     outputs:
       version: ${{ steps.version.outputs.version }}
+      marketing: ${{ steps.version.outputs.marketing }}
       signed: ${{ steps.result.outputs.signed }}
       notarized: ${{ steps.result.outputs.notarized }}
     steps:
@@ -166,6 +180,63 @@ jobs:
             security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
           fi
           rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/notary_key.p8"
+
+  app-store:
+    # Same version and build number as the Developer ID build of this run.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      HAVE_ASC: ${{ secrets.APPLE_TEAM_ID != '' && secrets.ASC_API_KEY_P8_BASE64 != '' && secrets.ASC_API_KEY_ID != '' && secrets.ASC_API_ISSUER_ID != '' }}
+    steps:
+      - name: Skip without App Store Connect secrets
+        if: env.HAVE_ASC != 'true'
+        run: |
+          echo "App Store build skipped: APPLE_TEAM_ID and the ASC_API_KEY_* secrets are not set." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v7
+        if: env.HAVE_ASC == 'true'
+
+      - name: Install XcodeGen and generate the project
+        if: env.HAVE_ASC == 'true'
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Write the App Store Connect API key
+        id: asc
+        if: env.HAVE_ASC == 'true'
+        env:
+          KEY_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          path="$RUNNER_TEMP/asc_key.p8"
+          echo "$KEY_BASE64" | base64 --decode > "$path"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+      - name: Archive, sign and export or upload
+        if: env.HAVE_ASC == 'true'
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_PATH: ${{ steps.asc.outputs.path }}
+          ASC_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          MARKETING_VERSION: ${{ needs.build.outputs.marketing }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          UPLOAD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.app_store_upload }}
+        run: scripts/ci/appstore.sh
+
+      - uses: actions/upload-artifact@v7
+        if: env.HAVE_ASC == 'true'
+        with:
+          name: KVMConsole-AppStore-${{ needs.build.outputs.version }}
+          path: dist-appstore/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Clean up the API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/asc_key.p8"
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
