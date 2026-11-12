@@ -21,11 +21,13 @@ struct DeviceListView: View {
                         }
                     } header: {
                         DeviceHeader(device: device, rename: startRenaming)
+                            .modifier(ReorderableDevice(device: device))
                     }
                 } else if let target = device.targets.first {
                     TargetRow(device: device, target: target,
                               subtitle: device.family.isLocal && model.pluggedUnits[device.id] == nil
                                   ? "Not plugged in" : device.model.displayName)
+                        .modifier(ReorderableDevice(device: device))
                         .tag(TargetSelection(deviceID: device.id, targetID: target.id))
                 }
             }
@@ -109,10 +111,13 @@ private struct TargetMenu: View {
 
 private struct DeviceMenu: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(AppPreferences.showUnpluggedUSBKey) private var showUnpluggedUSB = false
     let device: Device
     let rename: (Device) -> Void
 
     var body: some View {
+        let above = model.sidebarNeighbour(of: device.id, offset: -1, showUnplugged: showUnpluggedUSB)
+        let below = model.sidebarNeighbour(of: device.id, offset: 1, showUnplugged: showUnpluggedUSB)
         Button("Rename…") { rename(device) }
         Button("Edit…") { model.editorRequest = .edit(device.id) }
         Button("Reconnect") { Task { await model.session(for: device.id).connect() } }
@@ -123,7 +128,49 @@ private struct DeviceMenu: View {
             Button("Update \(device.family.shortName) OS…") { model.updateRequest = UpdateRequest(deviceID: device.id) }
         }
         Divider()
+        Button("Move Up") { if let above { withAnimation { model.moveDevice(device.id, onto: above) } } }
+            .disabled(above == nil)
+        Button("Move Down") { if let below { withAnimation { model.moveDevice(device.id, onto: below) } } }
+            .disabled(below == nil)
+        Divider()
         Button("Remove", role: .destructive) { model.delete(device.id) }
+    }
+}
+
+/// What a device carries when dragged to reorder the sidebar. A plain string
+/// with a prefix, so text dragged in from elsewhere is ignored.
+private enum DeviceDrag {
+    static let prefix = "kvm-console-device:"
+
+    static func payload(_ id: UUID) -> String { prefix + id.uuidString }
+
+    static func deviceID(from payload: String) -> UUID? {
+        guard payload.hasPrefix(prefix) else { return nil }
+        return UUID(uuidString: String(payload.dropFirst(prefix.count)))
+    }
+}
+
+/// Lets a device's sidebar row (or its Switch section header) be dragged onto
+/// another device to move it there.
+private struct ReorderableDevice: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let device: Device
+    @State private var isTargeted = false
+
+    func body(content: Content) -> some View {
+        content
+            .draggable(DeviceDrag.payload(device.id)) {
+                Label(device.name, systemImage: device.hasSwitch ? "server.rack" : "desktopcomputer")
+                    .padding(6)
+            }
+            .dropDestination(for: String.self) { items, _ in
+                guard let id = items.lazy.compactMap(DeviceDrag.deviceID).first, id != device.id else { return false }
+                withAnimation { model.moveDevice(id, onto: device.id) }
+                return true
+            } isTargeted: { isTargeted = $0 }
+            .background {
+                if isTargeted { RoundedRectangle(cornerRadius: 5).fill(.tint.opacity(0.25)).padding(-2) }
+            }
     }
 }
 

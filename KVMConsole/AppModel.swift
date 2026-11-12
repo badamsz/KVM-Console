@@ -269,6 +269,23 @@ final class AppModel {
         persist()
     }
 
+    // MARK: Order
+
+    /// Moves a device in the sidebar to where `destination` is (after it when
+    /// moving down, before it when moving up). Saved with the device list.
+    func moveDevice(_ deviceID: UUID, onto destination: UUID) {
+        if devices.move(deviceID, onto: destination) { persist() }
+    }
+
+    /// The device shown just above (`offset` -1) or below (+1) this one in the
+    /// sidebar, skipping USB KVMs the sidebar hides.
+    func sidebarNeighbour(of deviceID: UUID, offset: Int,
+                          showUnplugged: Bool = UserDefaults.standard.bool(forKey: AppPreferences.showUnpluggedUSBKey)) -> UUID? {
+        let visible = visibleDevices(showUnplugged: showUnplugged)
+        guard let i = visible.firstIndex(where: { $0.id == deviceID }), visible.indices.contains(i + offset) else { return nil }
+        return visible[i + offset].id
+    }
+
     func setMouseMode(_ mode: MouseMode, deviceID: UUID, targetID: UUID) {
         update(deviceID) { d in
             if let i = d.targets.firstIndex(where: { $0.id == targetID }) { d.targets[i].mouseMode = mode }
