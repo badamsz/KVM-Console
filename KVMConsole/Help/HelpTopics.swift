@@ -93,7 +93,7 @@ extension HelpTopic {
         Select a machine and choose **File > Open Console** (⌘↩), double-click the screen picture on its page, or use **Open Console** in the menu bar item. Each machine gets its own console window; opening it again brings that window forward.
 
         ## Full screen
-        Press ⌃⌘F or the full-screen button in the toolbar. In full screen the toolbar hides so the picture fills the display; **View > Hide Toolbar in Full Screen** (⌃⌘T) turns that off. Move the pointer to the top edge to reach the menu bar.
+        Press ⌃⌘F or the full-screen button in the toolbar. The toolbar stays visible in full screen; **View > Hide Toolbar in Full Screen** (⌃⌘T) hides it so the picture fills the display. Move the pointer to the top edge to reach the menu bar.
 
         ## The toolbar
         - **Mouse**: absolute or relative. See [Keyboard and Mouse](help:keyboard-mouse).

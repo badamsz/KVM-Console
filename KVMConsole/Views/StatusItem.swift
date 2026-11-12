@@ -214,7 +214,7 @@ struct SettingsView: View {
 private struct GeneralSettingsView: View {
     @Environment(AppModel.self) private var model
     @AppStorage(AppPreferences.showMenuBarExtraKey) private var showMenuBarExtra = true
-    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
+    @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = false
     @AppStorage(AppPreferences.autoAddUSBKey) private var autoAddUSB = true
     @AppStorage(AppPreferences.showUnpluggedUSBKey) private var showUnpluggedUSB = false
 
