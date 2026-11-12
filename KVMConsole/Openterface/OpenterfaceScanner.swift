@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 import IOKit
-import PiKVMKit
+import KVMKit
 
 /// One Openterface plugged into this Mac: its capture device, plus the serial
 /// port and audio input found on the same USB hub.

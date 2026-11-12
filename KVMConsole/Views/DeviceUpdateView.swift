@@ -1,5 +1,5 @@
 import Observation
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 struct UpdateRequest: Identifiable {

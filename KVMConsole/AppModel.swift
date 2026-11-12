@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import Observation
 import SwiftUI
-import PiKVMKit
+import KVMKit
 
 struct TargetSelection: Hashable, Codable {
     let deviceID: UUID
@@ -59,8 +59,6 @@ final class AppModel {
         self.credentials = credentials
         do {
             devices = try store.load()
-            // Devices renamed before renames reached the machine's name.
-            for i in devices.indices { devices[i].syncSingleTargetName() }
         } catch { lastError = "Couldn't load devices: \(error.localizedDescription)" }
         refreshUSB()
         watchUSB()

@@ -1,4 +1,4 @@
-import PiKVMKit
+import KVMKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -24,7 +24,7 @@ struct VirtualMediaView: View {
 
     /// A NanoKVM lists images by their path in /data; show the file name.
     private func displayName(_ image: MSDImage) -> String {
-        family.isSipeed ? (image.name as NSString).lastPathComponent : image.name
+        family.namesImagesByPath ? (image.name as NSString).lastPathComponent : image.name
     }
 
     private static let sizeFormatter: ByteCountFormatter = {
@@ -123,7 +123,7 @@ struct VirtualMediaView: View {
                 }
                 .pickerStyle(.segmented)
                 .disabled(connected)
-                if !asCD, family != .nanoKVM {
+                if !asCD, family.supportsWritableImages {
                     Toggle("Let the remote machine write to the image", isOn: $writable)
                         .disabled(connected)
                 }
@@ -209,7 +209,7 @@ struct VirtualMediaView: View {
                             Text("Downloading \(URL(string: download.file ?? "")?.lastPathComponent ?? "image")")
                                 .lineLimit(1).truncationMode(.middle)
                             Spacer()
-                            if session.nanoClient?.canCancelDownload == true {
+                            if session.downloader?.canCancelDownload == true {
                                 Button("Cancel") { run { try await session.cancelDownload() } }
                             }
                         }

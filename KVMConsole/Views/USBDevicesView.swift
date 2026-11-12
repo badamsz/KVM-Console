@@ -1,6 +1,6 @@
 import AppKit
 import AVFoundation
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 /// The USB Devices window: Openterface units plugged into this Mac, and

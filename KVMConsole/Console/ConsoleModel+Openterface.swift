@@ -1,13 +1,13 @@
 import AppKit
 import AVFoundation
 import Foundation
-import PiKVMKit
+import KVMKit
 
 /// The console's connection to an Openterface plugged into this Mac: video
 /// and audio through AVFoundation, keyboard and mouse as CH9329 commands on
 /// the unit's serial port.
 @MainActor
-final class OpenterfaceConsoleLink {
+final class OpenterfaceConsoleLink: ConsoleInput {
     let unit: OpenterfaceUnit
     let capture: OpenterfaceCapture
     private var serial: SerialPort?
@@ -172,7 +172,7 @@ final class OpenterfaceConsoleLink {
     }
 
     /// Positive `dy` scrolls up.
-    func mouseWheel(dy: Int, mode: MouseMode) {
+    func mouseWheel(dx: Int, dy: Int, mode: MouseMode) {
         guard dy != 0 else { return }
         sendButtons(mode: mode, wheel: dy)
     }
@@ -186,8 +186,33 @@ final class OpenterfaceConsoleLink {
         }
     }
 
+    // MARK: Paste
+
+    /// Typed as US-layout key presses, a few characters per progress update.
+    func pastePieces(_ text: String) -> [String] {
+        stride(from: 0, to: text.count, by: 8).map { start in
+            let from = text.index(text.startIndex, offsetBy: start)
+            let to = text.index(from, offsetBy: 8, limitedBy: text.endIndex) ?? text.endIndex
+            return String(text[from..<to])
+        }
+    }
+
+    func type(_ piece: String, rate: TypingRate) async throws -> Int {
+        // Each key event is a 14-byte frame; leave the serial port time to send it.
+        let pause = UInt64(max(rate.delay, 0.01) * 2 * 1_000_000_000)
+        var skipped = 0
+        for character in piece {
+            try Task.checkCancellation()
+            if !type(character) { skipped += 1 }
+            try? await Task.sleep(nanoseconds: pause)
+        }
+        return skipped
+    }
+
+    var pasteLimitation: String { "Openterface pastes with a US keyboard layout." }
+
     /// Types one character on a US layout. Returns false when it has no key.
-    func type(_ character: Character) -> Bool {
+    private func type(_ character: Character) -> Bool {
         guard let stroke = USKeyboardTyping.stroke(for: character) else { return false }
         if stroke.shift { key("ShiftLeft", down: true) }
         key(stroke.code, down: true)
@@ -222,6 +247,7 @@ extension ConsoleModel {
             return false
         }
         local = link
+        input = link
         link.capture.volume = muted ? 0 : Float(volume)
         showLocalVideo(link.capture.view, size: link.capture.videoSize, fps: link.capture.frameRate,
                        codec: "USB", audio: link.capture.hasAudio)
@@ -254,33 +280,5 @@ extension ConsoleModel {
             state = reason.map { .failed($0) } ?? .connecting
         }
         return reason == nil
-    }
-
-    /// Types text as US-layout key presses at the chosen typing rate.
-    func typeTextOnOpenterface(_ text: String, link: OpenterfaceConsoleLink) {
-        guard pasteProgress == nil else { return }
-        let characters = Array(text)
-        let total = characters.count
-        // Each key event is a 14-byte frame; leave the serial port time to send it.
-        let delay = max(typingRate.delay, 0.01)
-        pasteProgress = PasteProgress(typed: 0, total: total)
-        pasteTask = Task { [weak self] in
-            var typed = 0
-            var skipped = 0
-            for character in characters {
-                if Task.isCancelled { break }
-                if !link.type(character) { skipped += 1 }
-                typed += 1
-                if typed % 8 == 0 || typed == total {
-                    self?.pasteProgress = PasteProgress(typed: typed, total: total)
-                }
-                try? await Task.sleep(nanoseconds: UInt64(delay * 2 * 1_000_000_000))
-            }
-            if skipped > 0 {
-                self?.app?.lastError = "\(skipped) character\(skipped == 1 ? "" : "s") couldn't be typed. Openterface pastes with a US keyboard layout."
-            }
-            self?.pasteProgress = nil
-            self?.pasteTask = nil
-        }
     }
 }

@@ -1,4 +1,4 @@
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 struct DeviceEditorView: View {
@@ -26,14 +26,10 @@ struct DeviceEditorView: View {
                 Section("Device") {
                     TextField("Name", text: $device.name, prompt: Text("Rack KVM"))
                     Picker("Model", selection: $device.model) {
-                        Section("PiKVM") {
-                            ForEach(PiKVMModel.allCases.filter { $0.family == .pikvm }) { Text($0.displayName).tag($0) }
-                        }
-                        Section("Sipeed") {
-                            ForEach(PiKVMModel.allCases.filter { $0.family.isSipeed }) { Text($0.displayName).tag($0) }
-                        }
-                        Section("Plugged into this Mac") {
-                            ForEach(PiKVMModel.allCases.filter { $0.family.isLocal }) { Text($0.displayName).tag($0) }
+                        ForEach(DeviceModel.pickerGroups, id: \.title) { group in
+                            Section(group.title) {
+                                ForEach(group.models) { Text($0.displayName).tag($0) }
+                            }
                         }
                     }
                 }
@@ -94,8 +90,8 @@ struct DeviceEditorView: View {
 
     @ViewBuilder private var networkSections: some View {
         Section {
-            TextField("LAN address", text: $lanHost, prompt: Text(isSipeed ? "192.168.1.60 or nanokvm.local" : "192.168.1.50 or pikvm.local"))
-            TextField("Tailscale address", text: $tailscaleHost, prompt: Text(isSipeed ? "nanokvm.tailnet-name.ts.net" : "pikvm.tailnet-name.ts.net"))
+            TextField("LAN address", text: $lanHost, prompt: Text(device.family.exampleLANAddress))
+            TextField("Tailscale address", text: $tailscaleHost, prompt: Text(device.family.exampleTailscaleAddress))
         } header: {
             Text("Addresses")
         } footer: {

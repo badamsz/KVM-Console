@@ -2,15 +2,12 @@ import AppKit
 import AVFoundation
 import Foundation
 import Observation
-import PiKVMKit
+import KVMKit
 
-/// A live connection to one device: picks a reachable endpoint, keeps ATX,
-/// HID and Switch state fresh (from the kvmd event socket, or by polling a
-/// Sipeed NanoKVM), and applies the selected target's saved settings.
-///
-/// A PiKVM is driven through `client` (kvmd); a Sipeed device through
-/// `nanoClient`; an Openterface plugged into this Mac is `localUnit`.
-/// Exactly one of them is set while connected.
+/// A live connection to one device. It holds the device's observable state
+/// (ATX, HID, Switch, virtual media, previews) and applies the selected
+/// machine's saved settings. Everything specific to a kind of device lives
+/// in its `DeviceBackend`; see `Backends/`.
 @MainActor
 @Observable
 final class DeviceSession {
@@ -23,11 +20,12 @@ final class DeviceSession {
 
     let deviceID: UUID
     private(set) var status: Status = .idle
-    private(set) var info: DeviceInfo?
+    /// The connected device, or nil while not connected.
+    private(set) var backend: (any DeviceBackend)?
     private(set) var atx: ATXState?
     private(set) var hid: HIDState?
     private(set) var switchState: SwitchState?
-    /// The PiKVM's virtual drive and stored images.
+    /// The device's virtual drive and stored images.
     private(set) var msd: MSDState?
     /// An image upload started from this app.
     private(set) var upload: MediaUpload?
@@ -36,6 +34,8 @@ final class DeviceSession {
     private(set) var previewsLoading: Set<UUID> = []
     /// The machine whose Switch port is being made active, for a spinner in the sidebar.
     private(set) var switchingTo: UUID?
+    /// A download the device is making from a URL, while one runs.
+    private(set) var download: NanoKVMDownloadStatus?
 
     struct ScreenPreview {
         var image: NSImage?
@@ -53,38 +53,35 @@ final class DeviceSession {
     }
 
     private weak var model: AppModel?
-    private var connection: Connection?
-    private var nanoConnection: NanoKVMConnection?
-    private var eventTask: Task<Void, Never>?
+    private var changeTask: Task<Void, Never>?
     private var uploadTask: Task<Void, Never>?
+    private var downloadWatch: Task<Void, Never>?
 
     init(deviceID: UUID, model: AppModel) {
         self.deviceID = deviceID
         self.model = model
     }
 
-    /// The kvmd client, while connected to a PiKVM.
-    var client: KVMDClient? { connection?.client }
-    /// The NanoKVM client, while connected to a Sipeed device.
-    var nanoClient: NanoKVMClient? { nanoConnection?.client }
-    /// The Openterface this device stands for, while it is plugged in.
-    private(set) var localUnit: OpenterfaceUnit?
-    /// Connected to any kind of device.
-    var isConnected: Bool { client != nil || nanoClient != nil || localUnit != nil }
-    /// The NanoKVM application version, while connected to a Sipeed device.
-    private(set) var nanoInfo: NanoKVMInfo?
+    // MARK: Backend shortcuts
 
-    /// Which API this device speaks.
-    var family: DeviceFamily { model?.device(deviceID)?.family ?? .pikvm }
-    /// Whether images can be uploaded from this Mac (kvmd only, for now).
-    var supportsImageUpload: Bool { family == .pikvm || nanoCanUpload }
-    /// Whether the device can download images from a URL itself (Sipeed only).
-    var supportsURLDownload: Bool { nanoClient != nil }
-    /// Classic NanoKVM firmware before 2.5.3 has no upload API.
-    private var nanoCanUpload = false
-    /// A download the device is making from a URL, while one runs.
-    private(set) var download: NanoKVMDownloadStatus?
-    private var downloadWatch: Task<Void, Never>?
+    /// The kvmd client, while connected to a PiKVM.
+    var client: KVMDClient? { (backend as? PiKVMBackend)?.client }
+    /// The NanoKVM client, while connected to a Sipeed device.
+    var nanoClient: NanoKVMClient? { (backend as? NanoKVMBackend)?.client }
+    /// The Openterface this device stands for, while it is plugged in.
+    var localUnit: OpenterfaceUnit? { (backend as? OpenterfaceBackend)?.unit }
+    /// The device's download-from-URL support, when it has one.
+    var downloader: (any URLImageDownloading)? { backend as? any URLImageDownloading }
+
+    var isConnected: Bool { backend != nil }
+    /// Whether images can be uploaded from this Mac.
+    var supportsImageUpload: Bool { backend?.canUploadImages ?? false }
+    /// Whether the device can download images from a URL itself.
+    var supportsURLDownload: Bool { downloader != nil }
+    /// Versions and names for the detail page.
+    var infoRows: [(label: String, value: String)] { backend?.infoRows ?? [] }
+
+    // MARK: Connecting
 
     func connectIfNeeded() async {
         switch status {
@@ -95,73 +92,17 @@ final class DeviceSession {
 
     func connect() async {
         guard let model, let device = model.device(deviceID) else { return }
-        if device.family.isLocal {
-            model.refreshUSB()
-            connectLocal()
-            return
-        }
-        guard let password = model.credentials.password(for: deviceID) else {
-            status = .failed("No password saved for this device. Edit the device to add one.")
-            return
-        }
+        disconnect()
         status = .connecting
-        if device.family.isSipeed {
-            await connectNanoKVM(device, password: password, model: model)
-            return
-        }
         do {
-            let conn = try await ConnectionResolver.connect(to: device, password: password)
-            connection = conn
-            var learned = device
-            learned.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA)
-            if learned.certificateTrust != device.certificateTrust || learned.pinnedCertificateSHA256 != device.pinnedCertificateSHA256 {
-                model.update(deviceID) { $0.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA) }
-            }
-            status = .connected(endpointLabel: conn.endpoint.label, host: conn.endpoint.host)
-            info = try? await conn.client.info()
+            let connected = try await DeviceBackends.connect(to: device, app: model)
+            learnCertificate(sha256: connected.certificateSHA256, trustedByCA: connected.trustedByCA)
+            let backend = connected.backend
+            self.backend = backend
+            status = .connected(endpointLabel: backend.endpointLabel, host: backend.host)
             await refreshAll()
-            startEvents()
-        } catch {
-            status = .failed(error.localizedDescription)
-        }
-    }
-
-    /// Takes the Openterface this device is, if it is plugged in. The
-    /// console opens its video and serial port itself.
-    private func connectLocal() {
-        guard let unit = model?.pluggedUnits[deviceID] else {
-            localUnit = nil
-            status = .failed("This Openterface isn't plugged into this Mac. Connect its USB-C host cable to this Mac.")
-            return
-        }
-        localUnit = unit
-        status = .connected(endpointLabel: "USB", host: unit.displayName)
-    }
-
-    /// The app noticed this device's Openterface being plugged in, unplugged
-    /// or moved to another port.
-    func usbChanged() {
-        switch status {
-        case .connecting: return
-        case .idle where localUnit == nil: return
-        default: connectLocal()
-        }
-    }
-
-    private func connectNanoKVM(_ device: Device, password: String, model: AppModel) async {
-        do {
-            let conn = try await NanoKVMConnectionResolver.connect(to: device, password: password)
-            nanoConnection = conn
-            var learned = device
-            learned.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA)
-            if learned.certificateTrust != device.certificateTrust || learned.pinnedCertificateSHA256 != device.pinnedCertificateSHA256 {
-                model.update(deviceID) { $0.learnCertificate(sha256: conn.observedCertificateSHA256, trustedByCA: conn.observedTrustedByCA) }
-            }
-            status = .connected(endpointLabel: conn.endpoint.label, host: conn.endpoint.host)
-            nanoInfo = try? await conn.client.info()
-            await refreshAll()
-            startPolling()
-            if let status = try? await conn.client.downloadStatus(), status.inProgress {
+            follow(backend)
+            if let downloader, let status = try? await downloader.downloadStatus(), status.inProgress {
                 download = status
                 watchDownload()
             }
@@ -170,140 +111,89 @@ final class DeviceSession {
         }
     }
 
+    /// Trust on first use: remembers the certificate the first connection saw.
+    private func learnCertificate(sha256: String?, trustedByCA: Bool?) {
+        guard let model, let device = model.device(deviceID) else { return }
+        var learned = device
+        learned.learnCertificate(sha256: sha256, trustedByCA: trustedByCA)
+        if learned.certificateTrust != device.certificateTrust || learned.pinnedCertificateSHA256 != device.pinnedCertificateSHA256 {
+            model.update(deviceID) { $0.learnCertificate(sha256: sha256, trustedByCA: trustedByCA) }
+        }
+    }
+
+    /// The app noticed this device's Openterface being plugged in, unplugged
+    /// or moved to another port.
+    func usbChanged() {
+        switch status {
+        case .connecting: return
+        case .idle where backend == nil: return
+        default: Task { await connect() }
+        }
+    }
+
     func disconnect() {
-        eventTask?.cancel()
-        eventTask = nil
-        connection = nil
-        nanoConnection = nil
-        nanoInfo = nil
-        localUnit = nil
+        changeTask?.cancel()
+        changeTask = nil
+        backend?.stop()
+        backend = nil
         downloadWatch?.cancel()
         downloadWatch = nil
         download = nil
         status = .idle
     }
 
+    // MARK: State
+
+    /// Reads what the backend reports as changed, until it stops.
+    private func follow(_ backend: any DeviceBackend) {
+        changeTask?.cancel()
+        let changes = backend.changes
+        changeTask = Task { [weak self] in
+            for await change in changes {
+                guard let self else { return }
+                await self.refresh(change)
+            }
+        }
+    }
+
     func refreshAll() async {
-        if localUnit != nil { return }
-        if nanoClient != nil {
-            await refreshNanoATX()
-            await refreshMSD()
-            return
-        }
-        await refreshATX()
-        await refreshHID()
-        await refreshSwitch()
-        await refreshMSD()
+        await refresh(.atx)
+        await refresh(.hid)
+        await refresh(.switchPorts)
+        await refresh(.media(full: true))
     }
 
-    /// - Parameter includeFreeSpace: NanoKVM only; left out by background polling.
-    func refreshMSD(includeFreeSpace: Bool = true) async {
-        if let nanoClient {
-            // Without a fresh reading, keep showing the last free space.
-            let previous: (total: Int64?, free: Int64?)? = includeFreeSpace ? nil : (msd?.totalBytes, msd?.freeBytes)
-            let result = await Self.nanoMSD(nanoClient, includeFreeSpace: includeFreeSpace, previousSpace: previous)
-            msd = result?.state
-            nanoCanUpload = result?.canUpload ?? false
-            return
-        }
-        msd = try? await client?.msd()
-    }
-
-    nonisolated private static func nanoMSD(_ client: NanoKVMClient, includeFreeSpace: Bool,
-                                            previousSpace: (total: Int64?, free: Int64?)?) async -> (state: MSDState, canUpload: Bool)? {
-        guard var library = try? await client.library(includeFreeSpace: includeFreeSpace) else { return nil }
-        if let previousSpace, library.canUpload {
-            library.totalBytes = previousSpace.total
-            library.freeBytes = previousSpace.free
-        }
-        let mounted = try? await client.mountedImage()
-        var cdrom = mounted?.cdrom ?? false
-        if mounted?.cdrom == nil, client.family == .nanoKVM, mounted?.file.isEmpty == false {
-            cdrom = (try? await client.cdromMode()) ?? false
-        }
-        return (MSDState(nanoKVM: library, mounted: mounted, cdrom: cdrom), library.canUpload)
-    }
-
-    /// NanoKVM: the LEDs, shown as ATX state. Devices without an ATX board
-    /// (NanoKVM Lite, NanoKVM Go) fail to read them and show no power controls.
-    private func refreshNanoATX() async {
-        guard let nanoClient else { return }
-        if let leds = try? await nanoClient.leds() {
-            atx = ATXState(nanoKVM: leds, busy: powerPressing)
-        } else {
-            atx = nil
-        }
-    }
-
-    /// True while a NanoKVM power or reset button press is being held.
-    private var powerPressing = false
-
-    /// NanoKVM has no event socket for state, so poll the LEDs and media.
-    private func startPolling() {
-        eventTask?.cancel()
-        eventTask = Task { [weak self] in
-            var tick = 0
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard let self, self.nanoClient != nil else { return }
-                await self.refreshNanoATX()
-                tick += 1
-                if tick % 5 == 0 { await self.refreshMSD(includeFreeSpace: false) }
+    func refresh(_ change: DeviceStateChange) async {
+        guard let backend else { return }
+        switch change {
+        case .atx:
+            atx = await backend.readATX()
+        case .hid:
+            hid = await backend.readHID()
+        case .switchPorts:
+            let state = await backend.readSwitch()
+            switchState = state
+            if model?.device(deviceID)?.family.supportsSwitch == true {
+                model?.update(deviceID) { $0.syncTargets(withSwitchPorts: state?.ports ?? []) }
             }
+        case .media(let full):
+            msd = await backend.readMedia(full: full)
         }
     }
 
-    private func refreshATX() async {
-        atx = try? await client?.atx()
-    }
-
-    private func refreshHID() async {
-        hid = try? await client?.hid()
-    }
-
-    private func refreshSwitch() async {
-        guard let client else { return }
-        let state = try? await client.switchState()
-        switchState = state
-        model?.update(deviceID) { $0.syncTargets(withSwitchPorts: state?.ports ?? []) }
-    }
-
-    private func startEvents() {
-        eventTask?.cancel()
-        guard let client else { return }
-        eventTask = Task { [weak self] in
-            var backoff: UInt64 = 1
-            while !Task.isCancelled {
-                do {
-                    for try await event in client.events() {
-                        backoff = 1
-                        guard let self else { return }
-                        // kvmd may send partial updates, so re-read the full state.
-                        switch event.eventType {
-                        case "atx": await self.refreshATX()
-                        case "hid": await self.refreshHID()
-                        case "switch": await self.refreshSwitch()
-                        case "msd": await self.refreshMSD()
-                        default: break
-                        }
-                    }
-                } catch {}
-                try? await Task.sleep(nanoseconds: backoff * 1_000_000_000)
-                backoff = min(backoff * 2, 30)
-            }
-        }
+    func refreshMSD() async {
+        await refresh(.media(full: true))
     }
 
     // MARK: Actions
 
     /// Makes `target` the active machine (switch port) and applies its saved mouse mode.
     func activate(_ target: Target) async throws {
-        // A NanoKVM has one machine and picks the mouse per report.
-        guard let client else { return }
+        guard let backend else { return }
         if let port = target.switchPort, switchState?.activePort != port {
             switchingTo = target.id
             defer { if switchingTo == target.id { switchingTo = nil } }
-            try await client.setActiveSwitchPort(port)
+            try await backend.setActiveSwitchPort(port)
         }
         try await applyMouseMode(target.mouseMode)
     }
@@ -315,61 +205,20 @@ final class DeviceSession {
     }
 
     func setBeacon(_ on: Bool, for target: Target) async throws {
-        guard let client, let port = target.switchPort else { return }
-        try await client.setSwitchBeacon(port: port, on: on)
+        guard let port = target.switchPort else { return }
+        try await backend?.setSwitchBeacon(port: port, on: on)
     }
 
     func applyMouseMode(_ mode: MouseMode) async throws {
-        guard let client else { return }
-        if hid?.activeMouseMode != mode, hid?.supportedMouseModes.contains(mode) ?? true {
-            try await client.setMouseMode(mode)
-            await refreshHID()
-        }
+        try await backend?.applyMouseMode(mode, hid: hid)
     }
 
     func power(_ action: ATXPowerAction, for target: Target) async throws {
-        if nanoClient != nil {
-            try await pressNano(action.nanoKVMPress(powerIsOn: atx?.leds.power))
-            return
-        }
-        guard let client else { return }
-        if let port = target.switchPort {
-            try await client.switchATXPower(port: port, action)
-        } else {
-            try await client.atxPower(action)
-        }
+        try await backend?.power(action, switchPort: target.switchPort, poweredOn: leds(for: target)?.power)
     }
 
     func click(_ button: ATXButton, for target: Target) async throws {
-        if nanoClient != nil {
-            try await pressNano(button.nanoKVMPress)
-            return
-        }
-        guard let client else { return }
-        if let port = target.switchPort {
-            try await client.switchATXClick(port: port, button)
-        } else {
-            try await client.atxClick(button)
-        }
-    }
-
-    private func pressNano(_ press: ATXPowerAction.NanoKVMPress) async throws {
-        guard let nanoClient, press != .none, !powerPressing else { return }
-        powerPressing = true
-        if let atx { self.atx = ATXState(enabled: atx.enabled, busy: true, power: atx.leds.power, hdd: atx.leds.hdd) }
-        do {
-            switch press {
-            case .none: break
-            case .power(let ms): try await nanoClient.pressPower(milliseconds: ms)
-            case .reset: try await nanoClient.pressReset()
-            }
-        } catch {
-            powerPressing = false
-            await refreshNanoATX()
-            throw error
-        }
-        powerPressing = false
-        await refreshNanoATX()
+        try await backend?.click(button, switchPort: target.switchPort)
     }
 
     // MARK: Screen preview
@@ -386,20 +235,8 @@ final class DeviceSession {
         previewsLoading.insert(target.id)
         defer { previewsLoading.remove(target.id) }
         do {
-            if let localUnit {
-                let image = try await OpenterfaceCapture.snapshot(videoID: localUnit.id)
-                previews[target.id] = ScreenPreview(image: image, date: Date(), error: nil)
-                return
-            }
-            let data: Data
-            if let nanoClient {
-                data = try await nanoClient.snapshot()
-            } else if let client {
-                data = try await client.snapshot()
-            } else {
-                return
-            }
-            guard let image = NSImage(data: data) else { throw KVMDError.api("The device returned a picture this Mac can't read.") }
+            guard let backend else { return }
+            let image = try await backend.snapshot()
             previews[target.id] = ScreenPreview(image: image, date: Date(), error: nil)
         } catch is CancellationError {
         } catch {
@@ -413,60 +250,39 @@ final class DeviceSession {
 
     /// Selects `image` for the virtual drive and plugs it into the remote machine.
     func mountMedia(image: String, cdrom: Bool, writable: Bool) async throws {
-        if let nanoClient {
-            try await nanoClient.mountImage(image, cdrom: cdrom, writable: writable)
-            await refreshMSD()
-            return
-        }
-        guard let client else { return }
-        if msd?.drive?.connected == true {
-            try await client.msdSetConnected(false)
-        }
-        try await client.msdSetParams(image: image, cdrom: cdrom, writable: cdrom ? false : writable)
-        try await client.msdSetConnected(true)
+        guard let backend else { return }
+        try await backend.mountImage(image, cdrom: cdrom, writable: writable,
+                                     driveConnected: msd?.drive?.connected == true)
         await refreshMSD()
     }
 
     /// Unplugs the virtual drive from the remote machine.
     func ejectMedia() async throws {
-        if let nanoClient {
-            try await nanoClient.mountImage("", cdrom: false)
-            await refreshMSD()
-            return
-        }
-        guard let client else { return }
-        try await client.msdSetConnected(false)
+        guard let backend else { return }
+        try await backend.ejectImage()
         await refreshMSD()
     }
 
     func removeImage(_ name: String) async throws {
-        if let nanoClient {
-            try await nanoClient.deleteImage(name)
-            await refreshMSD()
-            return
-        }
-        guard let client else { return }
-        try await client.msdRemove(image: name)
+        guard let backend else { return }
+        try await backend.deleteImage(name)
         await refreshMSD()
     }
 
-    /// Uploads a local ISO or disk image to the PiKVM. Progress is in `upload`.
+    /// Uploads a local ISO or disk image to the device. Progress is in `upload`.
     func startUpload(fileURL: URL) {
-        guard upload == nil, client != nil || nanoClient != nil else { return }
+        guard upload == nil, let backend, backend.canUploadImages else { return }
         let name = MSDImageName.sanitized(fileURL.lastPathComponent)
         // Files picked in an open panel need this in the sandbox.
         let scoped = fileURL.startAccessingSecurityScopedResource()
         let size = Int64((try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        let deviceName = model?.device(deviceID)?.model.shortName ?? "PiKVM"
-        // A NanoKVM names images by their path in /data.
-        let storedName = nanoClient == nil ? name : NanoKVMClient.imageDirectory + "/" + name
+        let deviceName = model?.device(deviceID)?.model.shortName ?? "device"
+        let storedName = backend.storedImageName(for: name)
 
-        var problem: String?
-        if nanoClient != nil, !NanoKVMClient.isImageName(name) {
-            problem = "The \(deviceName) only uses .iso and .img files. Rename \(name) if it is a disk image."
-        } else if msd?.images.contains(where: { $0.name.lowercased() == storedName.lowercased() }) == true {
+        var problem = backend.uploadProblem(for: name)
+        if problem == nil, msd?.images.contains(where: { $0.name.lowercased() == storedName.lowercased() }) == true {
             problem = "The \(deviceName) already has an image named \(name). Delete it first, or rename the file."
-        } else if let free = msd?.freeBytes, size > free {
+        } else if problem == nil, let free = msd?.freeBytes, size > free {
             let f = ByteCountFormatter()
             problem = "\(name) is \(f.string(fromByteCount: size)), but the \(deviceName) has only \(f.string(fromByteCount: free)) free."
         }
@@ -486,23 +302,15 @@ final class DeviceSession {
                 session.upload = MediaUpload(name: name, sent: sent, total: total)
             }
         }
-        let client = self.client
-        let nanoClient = self.nanoClient
         uploadTask = Task { [weak self] in
             do {
-                if let nanoClient {
-                    try await nanoClient.uploadImage(fileURL: fileURL, as: name, progress: report)
-                } else if let client {
-                    try await client.msdUpload(fileURL: fileURL, as: name, progress: report)
-                }
+                try await backend.uploadImage(fileURL: fileURL, as: name, progress: report)
             } catch {
                 let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
                 if !cancelled {
                     self?.mediaError = "Uploading \(name) failed: \(error.localizedDescription)"
                 }
-                // A NanoKVM keeps what arrived; remove the partial image (the
-                // name was checked to be free before starting).
-                if let nanoClient { try? await nanoClient.deleteImage(storedName) }
+                await backend.cleanUpFailedUpload(storedName: storedName)
             }
             if scoped { fileURL.stopAccessingSecurityScopedResource() }
             self?.upload = nil
@@ -515,11 +323,11 @@ final class DeviceSession {
         uploadTask?.cancel()
     }
 
-    // MARK: Download from a URL (Sipeed)
+    // MARK: Download from a URL
 
     /// Asks the device to download an image from `url`. Progress is in `download`.
     func startDownload(url: URL) async throws {
-        guard let nanoClient, download?.inProgress != true else { return }
+        guard let downloader, download?.inProgress != true else { return }
         let name = url.lastPathComponent
         if !NanoKVMClient.isImageName(name) {
             throw KVMDError.api("The address must end in an .iso or .img file name, such as …/ubuntu-24.04-desktop-amd64.iso.")
@@ -527,14 +335,15 @@ final class DeviceSession {
         if msd?.images.contains(where: { ($0.name as NSString).lastPathComponent.lowercased() == name.lowercased() }) == true {
             throw KVMDError.api("The device already has an image named \(name). Delete it first.")
         }
-        try await nanoClient.startDownload(url: url)
-        download = try? await nanoClient.downloadStatus()
+        try await downloader.startDownload(url: url)
+        download = try? await downloader.downloadStatus()
         watchDownload()
     }
 
     func cancelDownload() async throws {
-        try await nanoClient?.cancelDownload()
-        download = try? await nanoClient?.downloadStatus()
+        guard let downloader else { return }
+        try await downloader.cancelDownload()
+        download = try? await downloader.downloadStatus()
     }
 
     /// Follows the device's download until it finishes, then refreshes the list.
@@ -543,8 +352,8 @@ final class DeviceSession {
         downloadWatch = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
-                guard let self, let nanoClient = self.nanoClient else { return }
-                guard let status = try? await nanoClient.downloadStatus() else { continue }
+                guard let self, let downloader = self.downloader else { return }
+                guard let status = try? await downloader.downloadStatus() else { continue }
                 if status.inProgress {
                     self.download = status
                     continue

@@ -1,4 +1,4 @@
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 /// The contents of a console window for one machine.
@@ -33,36 +33,17 @@ struct ConsoleWindow: View {
 private struct ConsoleContent: View {
     @Environment(AppModel.self) private var app
     let model: ConsoleModel
-    @State private var pendingPower: PowerConfirmation?
+    @State private var pendingPower: PowerCommand?
     @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = true
     @State private var powerActionRunning = false
-
-    /// Power actions that interrupt the machine and so ask first.
-    private enum PowerConfirmation {
-        case reset, forceOff
-    }
 
     var body: some View {
         let session = app.session(for: model.selection.deviceID)
         ZStack {
             ConsoleVideoView(model: model, frame: model.frame, liveView: model.webRTCView, videoSize: model.videoSize,
                              mouseMode: model.mouseMode, captured: model.mouseCaptured)
-                .confirmationDialog(
-                    pendingPower == .reset ? "Reset \(model.target?.name ?? "this machine")?" : "Force off \(model.target?.name ?? "this machine")?",
-                    isPresented: Binding(get: { pendingPower != nil }, set: { if !$0 { pendingPower = nil } }),
-                    presenting: pendingPower
-                ) { action in
-                    switch action {
-                    case .reset:
-                        Button("Reset", role: .destructive) { runPower(session) { try await session.click(.reset, for: $0) } }
-                    case .forceOff:
-                        Button("Force Off", role: .destructive) { runPower(session) { try await session.power(.offHard, for: $0) } }
-                    }
-                } message: { action in
-                    switch action {
-                    case .reset: Text("This presses the reset button and may lose unsaved work.")
-                    case .forceOff: Text("This holds the power button and may lose unsaved work.")
-                    }
+                .powerConfirmation($pendingPower, machine: model.target?.name ?? "this machine") { command in
+                    runPower(session) { try await command.perform(on: session, for: $0) }
                 }
             overlay
             pasteStatus
@@ -110,13 +91,17 @@ private struct ConsoleContent: View {
                     .padding(.horizontal, 4)
 
                     Menu {
-                        Button("Power On") { runPower(session) { try await session.power(.on, for: $0) } }
-                            .disabled(leds.power)
-                        Button("Shut Down") { runPower(session) { try await session.power(.off, for: $0) } }
-                            .disabled(!leds.power)
-                        Divider()
-                        Button("Reset…") { pendingPower = .reset }
-                        Button("Force Off…") { pendingPower = .forceOff }
+                        ForEach(PowerCommand.allCases) { command in
+                            if command == .reset { Divider() }
+                            Button(command.menuTitle) {
+                                if command.confirmation != nil {
+                                    pendingPower = command
+                                } else {
+                                    runPower(session) { try await command.perform(on: session, for: $0) }
+                                }
+                            }
+                            .disabled(!command.isEnabled(poweredOn: leds.power))
+                        }
                     } label: {
                         Label("Power", systemImage: "bolt")
                     }

@@ -1,6 +1,6 @@
 import AppKit
 import Observation
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 struct ConfigRequest: Identifiable {

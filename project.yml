@@ -10,8 +10,8 @@ configFiles:
   Debug: Config/Base.xcconfig
   Release: Config/Base.xcconfig
 packages:
-  PiKVMKit:
-    path: Packages/PiKVMKit
+  KVMKit:
+    path: Packages/KVMKit
   WebRTC:
     url: https://github.com/stasel/WebRTC
     exactVersion: 157.0.0
@@ -27,7 +27,7 @@ targets:
     sources:
       - KVMConsole
     dependencies:
-      - package: PiKVMKit
+      - package: KVMKit
       - package: WebRTC
     info:
       path: KVMConsole/Info.plist
@@ -71,9 +71,7 @@ targets:
         com.apple.security.files.user-selected.read-only: true
     settings:
       base:
-        # The app was called PiKVM Console. The bundle ID stays the same so the
-        # saved settings, Keychain access and camera/microphone permissions carry over.
-        PRODUCT_BUNDLE_IDENTIFIER: com.badamsz.PiKVMConsole
+        PRODUCT_BUNDLE_IDENTIFIER: com.badamsz.KVMConsole
         # Builds "KVM Console.app"; the Swift module keeps a name without a space.
         PRODUCT_NAME: KVM Console
         PRODUCT_MODULE_NAME: KVMConsole
@@ -88,4 +86,4 @@ schemes:
         KVMConsole: all
     test:
       targets:
-        - package: PiKVMKit/PiKVMKitTests
+        - package: KVMKit/KVMKitTests

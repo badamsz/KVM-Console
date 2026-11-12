@@ -2,7 +2,7 @@
 
 A native macOS app (macOS 14+) for remote control and management of [PiKVM](https://docs.pikvm.org) devices, of [Sipeed NanoKVM](https://wiki.sipeed.com/hardware/en/kvm/) devices (NanoKVM, NanoKVM Pro, NanoKVM Go), and of [Openterface](https://openterface.com) USB KVMs plugged into the Mac.
 
-Formerly `PiKVM Console`. The app keeps the old bundle ID (`com.badamsz.PiKVMConsole`) and Keychain service name, so saved settings, passwords and camera/microphone permissions carry over. The device list moves from `~/Library/Application Support/PiKVM Console` to `…/KVM Console` on first launch. After upgrading, delete the old `PiKVMConsole.app` if you had copied it to Applications.
+The bundle ID is `com.badamsz.KVMConsole`. Builds from before the rename (bundle ID `com.badamsz.PiKVMConsole`) kept their passwords, settings and permissions under the old ID, and nothing is carried over: after upgrading, add the devices again (the app is sandboxed, so its device list lives in a container named after the bundle ID; **Find Devices** helps), enter their passwords, allow camera, microphone and local network access again, and delete the old app.
 
 ## Openterface
 
@@ -34,12 +34,12 @@ open KVMConsole.xcodeproj
 
 Build and run the **KVMConsole** scheme (⌘R). The product is `KVM Console.app`.
 
-`Config/Local.xcconfig` gives the app a stable signing identity. A free personal team works; the example file explains how to find the team ID. The file is ignored by git and survives `xcodegen generate`. Without it the project still builds, but Xcode signs each build "to run locally", every rebuild looks like a new app to the Keychain, and macOS asks again for permission to read the saved device passwords ("KVM Console wants to use your confidential information stored in com.badamsz.PiKVMConsole"). With it, the first launch asks once more; choose **Always Allow** and it stays quiet from then on.
+`Config/Local.xcconfig` gives the app a stable signing identity. A free personal team works; the example file explains how to find the team ID. The file is ignored by git and survives `xcodegen generate`. Without it the project still builds, but Xcode signs each build "to run locally", every rebuild looks like a new app to the Keychain, and macOS asks again for permission to read the saved device passwords ("KVM Console wants to use your confidential information stored in com.badamsz.KVMConsole"). With it, the first launch asks once more; choose **Always Allow** and it stays quiet from then on.
 
 ### Tests
 
-- **PiKVMKit** (models, clients, storage, discovery): ⌘U in Xcode, or `swift test --package-path Packages/PiKVMKit` without Xcode.
-- **On-device configuration helper** (Python): `python3 -m unittest discover -s Packages/PiKVMKit/Tests/HelperTests`. Needs `pip install ruamel.yaml pyyaml`.
+- **KVMKit** (models, clients, storage, discovery): ⌘U in Xcode, or `swift test --package-path Packages/KVMKit` without Xcode.
+- **On-device configuration helper** (Python): `python3 -m unittest discover -s Packages/KVMKit/Tests/HelperTests`. Needs `pip install ruamel.yaml pyyaml`.
 
 ### Release builds
 
@@ -81,8 +81,34 @@ The workflow calls `scripts/ci/package.sh` to sign, notarize and package the app
 
 ## Layout
 
-- `Packages/PiKVMKit`: models, the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), the NanoKVM client (`NanoKVMClient.swift`), Keychain and JSON storage, and network discovery (`Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API).
-- `KVMConsole`: the SwiftUI app.
+- `KVMConsole/`: the SwiftUI app.
+  - `DeviceSession.swift`: one connected device's observable state (ATX, Switch, virtual media, previews). It has no per-device branches; it talks to a `DeviceBackend`.
+  - `Backends/`: one `DeviceBackend` per kind of device (`PiKVMBackend`, `NanoKVMBackend`, `OpenterfaceBackend`). `DeviceBackends.connect` is the one place that maps a device family to its backend.
+  - `Console/`: the console window. `ConsoleModel` drives video and talks to a `ConsoleInput` for keyboard, mouse and paste (`KVMDConsoleInput`, `NanoKVMConsoleLink`, `OpenterfaceConsoleLink`).
+  - `Views/`, `Discovery/`, `Help/`, `Openterface/` (USB capture and serial).
+- `Packages/KVMKit/`: everything that doesn't need the UI, with tests.
+  - `Core/`: models (`Device`, `DeviceModel`, `DeviceFamily` and its feature profile), Keychain and JSON storage, certificate pinning, HID reports, paste.
+  - `PiKVM/`: the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), Janus/WebRTC signalling, config editing and OS updates over the web terminal.
+  - `NanoKVM/`: the Sipeed client and its adapters to the shared state types.
+  - `Openterface/`: the CH9329 serial protocol.
+  - `Streaming/`: MJPEG and direct H.264 decoding.
+  - `Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API.
+
+### Adding a kind of device
+
+1. Add a `DeviceFamily` case and its `DeviceModel` cases in `Core/Models.swift`, and fill in the feature profile next to them (`supportsSwitch`, `supportsVideoModeChoice`, …). Views read these flags instead of checking for a specific family, and the model picker groups models automatically.
+2. Put the client in its own folder in `KVMKit`, with tests.
+3. Write a `DeviceBackend` in `KVMConsole/Backends/`. Implement only what the device can do; the protocol's defaults cover the rest. Add it to `DeviceBackends.connect`.
+4. Write a `ConsoleInput` for keyboard, mouse and paste, and a `run…Once` for its video in `ConsoleModel`.
+
+## Dependencies
+
+Two bots keep dependencies current, split so they never open the same pull request:
+
+- **Renovate** (`renovate.json`) updates Swift packages: the `WebRTC` package in `project.yml` (XcodeGen) and anything added to `Packages/KVMKit/Package.swift`. Dependabot can't read `project.yml`. Renovate also opens security fixes for these as soon as GitHub reports a vulnerability.
+- **Dependabot** (`.github/dependabot.yml`) updates GitHub Actions in one grouped pull request a week. Renovate leaves Actions alone.
+
+Both run on Monday mornings and label their pull requests `dependencies`.
 
 ## Help
 

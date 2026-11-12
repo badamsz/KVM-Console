@@ -1,0 +1,22 @@
+# Dependabot updates GitHub Actions only. Swift packages are Renovate's job
+# (see renovate.json): the WebRTC package is declared in XcodeGen's
+# project.yml, which Dependabot can't read. Keeping each ecosystem with one
+# bot means the two never open the same pull request.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/New_York
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "CI"
+    open-pull-requests-limit: 5

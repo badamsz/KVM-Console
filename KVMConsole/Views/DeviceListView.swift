@@ -1,4 +1,4 @@
-import PiKVMKit
+import KVMKit
 import SwiftUI
 
 struct DeviceListView: View {
@@ -116,9 +116,11 @@ private struct DeviceMenu: View {
         Button("Rename…") { rename(device) }
         Button("Edit…") { model.editorRequest = .edit(device.id) }
         Button("Reconnect") { Task { await model.session(for: device.id).connect() } }
-        if device.family == .pikvm {
-            Button("Configure PiKVM…") { model.configRequest = ConfigRequest(deviceID: device.id) }
-            Button("Update PiKVM OS…") { model.updateRequest = UpdateRequest(deviceID: device.id) }
+        if device.family.supportsConfigurationEditing {
+            Button("Configure \(device.family.shortName)…") { model.configRequest = ConfigRequest(deviceID: device.id) }
+        }
+        if device.family.supportsOSUpdate {
+            Button("Update \(device.family.shortName) OS…") { model.updateRequest = UpdateRequest(deviceID: device.id) }
         }
         Divider()
         Button("Remove", role: .destructive) { model.delete(device.id) }
@@ -150,8 +152,7 @@ private struct TargetRow: View {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint).help("Active switch port")
             }
             if let leds {
-                Circle().fill(leds.power ? Color.green : Color.secondary.opacity(0.3))
-                    .frame(width: 8, height: 8).help(leds.power ? "Powered on" : "Powered off")
+                StatusLight(on: leds.power, size: 8).help(leds.power ? "Powered on" : "Powered off")
             }
         }
         .help(session.isOnScreen(target) ? "Double-click to open the console" : "Double-click to switch to this port")
