@@ -219,3 +219,9 @@ Requires the web terminal (`kvmd-webterm`), which PiKVM OS enables by default.
 - Relative mouse mode needs kvmd's alternate mouse enabled. Without it, `usb_rel` isn't offered.
 - A PiKVM Switch has 4 ports and up to 5 can be chained (20 machines); every port is listed in the sidebar, and with a chain each shows which Switch and port it is on.
 - Machines behind a PiKVM Switch use the switch's ATX endpoints (`/api/switch/atx/*`). A Switch port's page can also blink that port's light on the Switch, to find it on the hardware. Double-click a machine behind a Switch in the sidebar (or select it and press Return) to make its port active; its right-click menu has the same action. Double-clicking a machine that is already on screen (an active port, or a PiKVM without a Switch) opens its console.
+
+## License
+
+KVM Console is released under the [MIT License](LICENSE), copyright 2026 Bryan Adams.
+
+The app includes WebRTC (through the `WebRTC` Swift package), which is under the BSD 3-Clause License. Its notice is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and, for builds, in `KVMConsole/Credits.rtf`, which the standard **About KVM Console** window shows. When adding a dependency, check that its license allows closed-source and App Store distribution (no GPL or AGPL) and add its notice to both files.

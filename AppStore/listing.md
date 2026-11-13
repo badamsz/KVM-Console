@@ -15,7 +15,7 @@ Character limits are Apple's; counts are given where they are close.
 | Secondary category | Developer Tools |
 | Content rights | Does not contain, show or access third-party content. |
 | Age rating | Answer **None/No** to every question. Result: 4+. |
-| Copyright | `2026 <your legal name>` |
+| Copyright | `2026 Bryan Adams` |
 
 ## Version page
 
