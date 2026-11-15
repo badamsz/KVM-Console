@@ -40,13 +40,18 @@ public enum NanoKVMProDisk: String, Sendable, CaseIterable, Hashable {
     case emmc
 }
 
-/// A NanoKVM Pro's built-in EDID (the display the remote machine sees).
+/// A built-in EDID on a NanoKVM Pro or Go (the display the remote machine sees).
 public struct NanoKVMEDID: Sendable, Hashable, Identifiable {
     public let id: String
     public let label: String
 
+    public init(id: String, label: String) {
+        self.id = id
+        self.label = label
+    }
+
     /// The Pro's built-in EDIDs, labelled the way its web page labels them.
-    public static let builtIn: [NanoKVMEDID] = [
+    public static let pro: [NanoKVMEDID] = [
         NanoKVMEDID(id: "E18-4K30FPS", label: "3840 × 2160, 30 Hz"),
         NanoKVMEDID(id: "E48-4K39FPS", label: "3840 × 2160, 39 Hz"),
         NanoKVMEDID(id: "E56-2K60FPS", label: "2560 × 1440, 60 Hz"),
@@ -54,6 +59,37 @@ public struct NanoKVMEDID: Sendable, Hashable, Identifiable {
         NanoKVMEDID(id: "E58-4K16-10", label: "3840 × 2400, 30 Hz"),
         NanoKVMEDID(id: "E63-Ultrawide", label: "3440 × 1440, 60 Hz"),
     ]
+
+    /// The Go's built-in EDIDs, from Sipeed's NanoKVM Go resolution page
+    /// (wiki.sipeed.com/hardware/en/kvm/NanoKVM_Go/resolution.html). The Go's
+    /// source isn't published; the IDs follow the one a Go reports,
+    /// `nanokvm-go-2560x1440-60`.
+    public static let go: [NanoKVMEDID] = [
+        ("3840x2160-50", " (beta)"), ("3840x2160-30", ""), ("3440x1440-60", ""),
+        ("2560x1440-60", ""), ("1920x1080-60", ""),
+    ].map { mode, note in
+        let id = goPrefix + mode
+        return NanoKVMEDID(id: id, label: (label(for: id) ?? mode) + note)
+    }
+
+    static let goPrefix = "nanokvm-go-"
+
+    /// The built-in EDIDs to offer: the Go's when the device is a Go or
+    /// reports a Go EDID, otherwise the Pro's.
+    public static func builtIn(current: String, isGo: Bool) -> [NanoKVMEDID] {
+        isGo || current.hasPrefix(goPrefix) ? go : pro
+    }
+
+    /// A readable label for an EDID ID that names its mode, such as
+    /// `nanokvm-go-2560x1440-60` → "2560 × 1440, 60 Hz".
+    public static func label(for id: String) -> String? {
+        if let known = pro.first(where: { $0.id == id }) { return known.label }
+        let parts = id.split(separator: "-")
+        guard parts.count >= 2, let rate = Int(parts[parts.count - 1]) else { return nil }
+        let size = parts[parts.count - 2].split(separator: "x")
+        guard size.count == 2, let w = Int(size[0]), let h = Int(size[1]) else { return nil }
+        return "\(w) × \(h), \(rate) Hz"
+    }
 }
 
 /// A Sipeed device's settings. Nil means the device doesn't have the

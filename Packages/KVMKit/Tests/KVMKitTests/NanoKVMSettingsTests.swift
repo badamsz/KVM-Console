@@ -101,4 +101,18 @@ final class NanoKVMSettingsTests: XCTestCase {
         XCTAssertTrue(DeviceFamily.nanoKVMPro.supportsConfigurationEditing)
         XCTAssertFalse(DeviceFamily.openterface.supportsConfigurationEditing)
     }
+
+    func testGoEDIDs() {
+        XCTAssertEqual(NanoKVMEDID.builtIn(current: "nanokvm-go-2560x1440-60", isGo: false), NanoKVMEDID.go)
+        XCTAssertEqual(NanoKVMEDID.builtIn(current: "", isGo: true), NanoKVMEDID.go)
+        XCTAssertEqual(NanoKVMEDID.builtIn(current: "E54-1080P60FPS", isGo: false), NanoKVMEDID.pro)
+        XCTAssertTrue(NanoKVMEDID.go.contains { $0.id == "nanokvm-go-2560x1440-60" && $0.label == "2560 × 1440, 60 Hz" })
+        XCTAssertEqual(NanoKVMEDID.go.count, 5)
+    }
+
+    func testEDIDLabels() {
+        XCTAssertEqual(NanoKVMEDID.label(for: "nanokvm-go-3840x2160-30"), "3840 × 2160, 30 Hz")
+        XCTAssertEqual(NanoKVMEDID.label(for: "E63-Ultrawide"), "3440 × 1440, 60 Hz")
+        XCTAssertNil(NanoKVMEDID.label(for: "mine.bin"))
+    }
 }

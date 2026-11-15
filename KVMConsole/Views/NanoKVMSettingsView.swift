@@ -194,7 +194,7 @@ struct NanoKVMSettingsView: View {
             general(s, device)
             input(s)
             usbDevices(s)
-            video(s)
+            video(s, device)
             system(s)
         }
         .formStyle(.grouped)
@@ -342,7 +342,7 @@ struct NanoKVMSettingsView: View {
         }
     }
 
-    @ViewBuilder private func video(_ s: NanoKVMSettings) -> some View {
+    @ViewBuilder private func video(_ s: NanoKVMSettings, _ device: Device?) -> some View {
         if s.hdmiCapture != nil || s.hdmiPassthrough != nil || s.edid != nil {
             Section("Video") {
                 if let on = s.hdmiCapture {
@@ -386,22 +386,23 @@ struct NanoKVMSettingsView: View {
                     }
                 }
                 if let edid = s.edid {
+                    let builtIn = NanoKVMEDID.builtIn(current: edid, isGo: device?.model == .nanoKVMGo)
                     row(help: "The display the remote machine thinks it's connected to, which sets the resolutions it offers. Upload your own on the NanoKVM's web page.") {
                         Picker("Display (EDID)", selection: Binding(get: { edid }, set: { value in
-                            pending = PendingChange(title: "Change the display to \(Self.edidName(value, in: s))?",
+                            pending = PendingChange(title: "Change the display to \(Self.edidName(value))?",
                                                     message: "The remote machine sees its monitor unplugged and plugged in again, and may change resolution.",
                                                     button: "Change") {
                                 model.apply("Changing the EDID…", optimistic: { $0.edid = value }) { try await $0.setEDID(value) }
                             }
                         })) {
                             if edid.isEmpty { Text("Unknown").tag("") }
-                            ForEach(NanoKVMEDID.builtIn) { Text($0.label).tag($0.id) }
+                            ForEach(builtIn) { Text($0.label).tag($0.id) }
                             if !s.customEDIDs.isEmpty {
                                 Divider()
                                 ForEach(s.customEDIDs, id: \.self) { Text($0).tag($0) }
                             }
-                            if !edid.isEmpty, !NanoKVMEDID.builtIn.contains(where: { $0.id == edid }), !s.customEDIDs.contains(edid) {
-                                Text(edid).tag(edid)
+                            if !edid.isEmpty, !builtIn.contains(where: { $0.id == edid }), !s.customEDIDs.contains(edid) {
+                                Text(Self.edidName(edid)).tag(edid)
                             }
                         }
                     }
@@ -543,7 +544,7 @@ struct NanoKVMSettingsView: View {
         }
     }
 
-    private static func edidName(_ id: String, in s: NanoKVMSettings) -> String {
-        NanoKVMEDID.builtIn.first { $0.id == id }?.label ?? id
+    private static func edidName(_ id: String) -> String {
+        NanoKVMEDID.go.first { $0.id == id }?.label ?? NanoKVMEDID.label(for: id) ?? id
     }
 }
