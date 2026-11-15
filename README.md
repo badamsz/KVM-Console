@@ -120,7 +120,7 @@ Both run on Monday mornings and label their pull requests `dependencies`.
 
 ## Help
 
-**Help > KVM Console Help** (⌘?) opens a help window with topics on adding and finding devices, the console, mouse modes, virtual media, power control, the PiKVM Switch, NanoKVM, Openterface, configuring and updating a PiKVM, certificates (including your own CA), AI agents (MCP), shortcuts and troubleshooting. Typing in the Help menu's search field lists matching topics too, and sheets such as the device editor and virtual media have a **?** button that opens the relevant topic. The text lives in `KVMConsole/Help/HelpTopics.swift`; update it along with this README when features change.
+**Help > KVM Console Help** (⌘?) opens a help window with topics on adding and finding devices, the console, mouse modes, virtual media, power control, the PiKVM Switch, NanoKVM, Openterface, configuring a NanoKVM, configuring and updating a PiKVM, certificates (including your own CA), AI agents (MCP), shortcuts and troubleshooting. Typing in the Help menu's search field lists matching topics too, and sheets such as the device editor and virtual media have a **?** button that opens the relevant topic. The text lives in `KVMConsole/Help/HelpTopics.swift`; update it along with this README when features change.
 
 ## Finding devices on the network
 
@@ -178,6 +178,7 @@ What works:
   - **Download from URL…** makes the device download an image from the internet itself. It keeps going if you close the window, and the classic NanoKVM can cancel it.
   - A classic NanoKVM on 2.5.3+ also reports image sizes, free space, and which images can be a CD/DVD.
 - Screen preview.
+- **Configure NanoKVM…** shows and changes the device settings from the NanoKVM's own Settings page, through its HTTP API with the app's existing login: host name, web page title, SSH, mDNS, preview updates, OLED/LCD sleep, HID mode (keyboard and mouse only), mouse jiggler, USB network adapter, USB drive and microphone, HDMI capture (and its idle timeout on the classic NanoKVM), HDMI passthrough and EDID (Pro and Go), swap (classic), time zone and low power mode (Pro and Go), and reboot. Each setting is read separately and hidden when the device doesn't answer for it, which covers the differences between models and firmware versions. Changes apply at once; ones that interrupt the remote machine's USB or video ask first, and the Pro's first eMMC mount warns that it erases `/data`. Code: `NanoKVMSettings.swift` (KVMKit) and `NanoKVMSettingsView.swift`.
 
 Not yet: H.264 video and audio (they use NanoKVM's own WebRTC signalling), and microphone and camera passthrough.
 

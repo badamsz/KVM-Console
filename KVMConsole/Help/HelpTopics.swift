@@ -6,7 +6,7 @@ import Foundation
 extension HelpTopic {
     static let all: [HelpTopic] = [
         gettingStarted, addingDevices, findingDevices, console, keyboardAndMouse,
-        virtualMedia, power, pikvmSwitch, nanoKVM, openterface, configuringPiKVM,
+        virtualMedia, power, pikvmSwitch, nanoKVM, configuringNanoKVM, openterface, configuringPiKVM,
         updatingPiKVM, certificates, menuBar, aiAgents, shortcuts, troubleshooting,
     ]
 
@@ -223,6 +223,7 @@ extension HelpTopic {
         - Power control on models with the ATX board.
         - Virtual media, including **Download from URL…**. See [Virtual Media](help:virtual-media).
         - The screen picture on the machine's page.
+        - The NanoKVM's device settings. See [Configuring a NanoKVM](help:configure-nanokvm).
 
         Not yet: H.264 video, sound, and microphone or camera passthrough.
 
@@ -230,6 +231,31 @@ extension HelpTopic {
         A classic NanoKVM uses plain HTTP unless HTTPS is turned on in its settings; the Pro and Go use HTTPS with a self-signed certificate. The app tries HTTPS first and falls back to HTTP, and once it has seen a certificate for the device it only uses HTTPS. To force one or the other, write it into the address, such as `http://192.168.1.60`.
 
         > macOS only allows plain HTTP to IP addresses, `.local` names, bare host names and Tailscale `*.ts.net` names. Use HTTPS for any other name.
+        """)
+
+    static let configuringNanoKVM = HelpTopic(
+        "configure-nanokvm", title: "Configuring a NanoKVM", symbol: "gearshape",
+        keywords: ["settings", "nanokvm", "sipeed", "host name", "hostname", "ssh", "mdns", "jiggler", "hid only", "edid", "hdmi", "passthrough", "usb network", "emmc", "sd card", "swap", "time zone", "low power", "reboot"],
+        body: """
+        **Configure NanoKVM…** (the gear in a machine's toolbar, or right-click the device) shows the settings from the NanoKVM's own Settings page and changes them over the connection the app already has, so it needs no extra password. Each change applies straight away and stays after a reboot. Settings this NanoKVM doesn't have are hidden, so the list differs between the NanoKVM, Pro and Go and between software versions.
+
+        ## Settings
+        - **General**: host name, web page title, SSH, mDNS, preview (beta) updates, and how long its own screen stays on.
+        - **Keyboard and Mouse**: *Keyboard and mouse only* hides the virtual drive and network adapter from BIOSes that don't cope with them. The mouse jiggler keeps the remote machine awake.
+        - **USB Devices**: the USB network adapter, and the USB drive (the data partition on a NanoKVM; the SD card or built-in eMMC on a Pro or Go). A Pro or Go also has a USB microphone.
+        - **Video**: turning HDMI capture off, pausing capture when nobody is watching (NanoKVM), HDMI passthrough and the EDID the remote machine sees (Pro and Go).
+        - **System**: swap (NanoKVM), time zone and low power mode (Pro and Go).
+
+        ## Changes that interrupt the remote machine
+        The app asks first before:
+        - Changing USB devices. The NanoKVM reconnects its USB, so the remote machine loses its keyboard and mouse for a moment. Changing to *Keyboard and mouse only* (or back) on a classic NanoKVM reboots it.
+        - Choosing the built-in eMMC as the USB drive on a Pro or Go for the first time. That **erases the NanoKVM's /data folder**, including its ISO images.
+        - Changing the EDID, which looks to the remote machine like a new monitor.
+        - Turning off HDMI capture, or turning off mDNS while the device's address is a `.local` name.
+
+        **Reboot NanoKVM…** restarts the NanoKVM; the machine it controls keeps running. Choose **Reconnect** once it's back.
+
+        Wi-Fi, Tailscale, HTTPS, user accounts and custom EDID uploads stay on the NanoKVM's web page.
         """)
 
     static let openterface = HelpTopic(

@@ -142,6 +142,8 @@ public final class NanoKVMClient: @unchecked Sendable {
         guard var comps = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
             throw KVMDError.invalidURL
         }
+        // Some routes are registered with a trailing slash (the mouse jiggler).
+        if path.hasSuffix("/"), !comps.path.hasSuffix("/") { comps.path += "/" }
         if !query.isEmpty {
             comps.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
