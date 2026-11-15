@@ -86,17 +86,41 @@ These only work if the repository is public, or once the two pages are published
 
 ## Screenshots
 
-Mac screenshots must be 16:10, one of 1280×800, 1440×900, 2560×1600 or 2880×1800, 1 to 10 of them. Take them on a Retina Mac with the window at 1440×900 points and save at 2880×1800 (or use Shift-Command-5 on a window, then resize the canvas). Suggested set, in order:
+App Store Connect takes 1 to 10 Mac screenshots, all at one 16:10 size: 1280×800, 1440×900, 2560×1600 or 2880×1800. Capture plain windows on your Mac, then let `scripts/appstore-screenshots.swift` place them on a background at 2880×1800 with a caption.
 
-1. A console window showing a server's BIOS or OS installer, toolbar visible. Caption: "Your server's screen, on your Mac".
-2. The main window: sidebar with several machines and Switch ports, live previews. Caption: "Every machine in one place".
-3. Virtual media sheet mounting an ISO. Caption: "Mount ISOs from your Mac".
-4. A machine page with power controls and the power/HDD lights. Caption: "Power control with ATX".
-5. Find Devices with Bonjour/Tailscale results. Caption: "Find KVMs on your network".
-6. An Openterface console. Caption: "Openterface over USB, no network needed".
-7. Settings > AI Agents (optional). Caption: "Optional, off-by-default AI agent access".
+### 1. Get ready
 
-Hide real host names, IP addresses and tailnet names, or use demo names, before capturing.
+- **Use demo names.** Rename devices and machines to neutral names (for example "Web Server", "NAS", "Build Box", "Lab Switch") and hide real IP addresses, host names and tailnet names. Settings > AI Agents shows its address and token: press New… next to the token after capturing to replace it, or blur it.
+- **Use a Retina display** so captures are 2× and stay sharp when scaled up.
+- **Size the window** to about 1400×880 points (a 16:10 shape fills the frame best). The exact size doesn't matter; the script fits it.
+- Turn on Do Not Disturb, and hide the Dock and other windows if you capture more than one window.
+
+### 2. Capture
+
+For each shot: press **Shift-Command-4**, then **Space**, then click the window. macOS saves a PNG on the Desktop with the window's shadow, which looks good on the background. (Hold **Option** while clicking to leave the shadow out.)
+
+| # | Window and state | Caption (`screenshot-captions.txt`) |
+| --- | --- | --- |
+| 1 | A console window showing a server's BIOS, boot menu or OS installer, toolbar visible | Your server's screen, on your Mac |
+| 2 | The main window: sidebar with several machines and Switch ports, a machine page with its live preview | Every machine in one place |
+| 3 | The virtual media sheet with an ISO mounted | Mount ISOs from your Mac |
+| 4 | A machine page or console toolbar showing the Power menu and the power/HDD lights | Power control with ATX |
+| 5 | Find Devices with Bonjour or Tailscale results | Find KVMs on your network |
+| 6 | An Openterface console | Openterface over USB, no network needed |
+| 7 | Settings > AI Agents (optional; hide the token) | Optional AI agent access, off by default |
+
+Skip any shot you can't take. If you skip some, delete those lines from `screenshot-captions.txt` so the captions stay in order.
+
+### 3. Make the store images
+
+Put the captures in order (rename them `1.png`, `2.png`, …) and run from the repository folder:
+
+```sh
+swift scripts/appstore-screenshots.swift --captions AppStore/screenshot-captions.txt \
+    ~/Desktop/shots/1.png ~/Desktop/shots/2.png ~/Desktop/shots/3.png
+```
+
+It writes `AppStore/screenshots/01.png`, `02.png`, … at 2880×1800 with no transparency, ready to drag into App Store Connect > Distribution > macOS App > Previews and Screenshots. Options: `--background 1C2433` changes the colour, `--size 2560x1600` another accepted size, and leaving out `--captions` gives plain screenshots.
 
 ## App Preview (optional)
 

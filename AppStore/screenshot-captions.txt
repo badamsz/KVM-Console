@@ -1,0 +1,7 @@
+Your server's screen, on your Mac
+Every machine in one place
+Mount ISOs from your Mac
+Power control with ATX
+Find KVMs on your network
+Openterface over USB, no network needed
+Optional AI agent access, off by default
