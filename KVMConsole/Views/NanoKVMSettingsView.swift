@@ -390,7 +390,9 @@ struct NanoKVMSettingsView: View {
                     row(help: "The display the remote machine thinks it's connected to, which sets the resolutions it offers. Upload your own on the NanoKVM's web page.") {
                         Picker("Display (EDID)", selection: Binding(get: { edid }, set: { value in
                             pending = PendingChange(title: "Change the display to \(Self.edidName(value))?",
-                                                    message: "The remote machine sees its monitor unplugged and plugged in again, and may change resolution.",
+                                                    message: builtIn == NanoKVMEDID.go
+                                                        ? "The remote machine sees its monitor unplugged and plugged in again, and may change resolution. On a NanoKVM Go the new EDID may only take effect, and the video may stay black, until you unplug the Go from the remote machine and plug it in again (Sipeed suggests using PD power while changing it)."
+                                                        : "The remote machine sees its monitor unplugged and plugged in again, and may change resolution.",
                                                     button: "Change") {
                                 model.apply("Changing the EDID…", optimistic: { $0.edid = value }) { try await $0.setEDID(value) }
                             }
