@@ -239,6 +239,10 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
     /// For a device plugged into this Mac: its USB serial number, when it
     /// reports one, so it is recognised in any USB port.
     public var localSerialNumber: String?
+    /// For a NanoKVM that streams video directly (NanoKVM Go): the codec and
+    /// encoder settings sent on connect. Nil is H.264 with the device's own
+    /// encoder settings.
+    public var nanoStream: NanoKVMStreamSettings?
 
     public init(
         id: UUID = UUID(),
@@ -250,7 +254,8 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         pinnedCertificateSHA256: String? = nil,
         certificateTrust: CertificateTrust? = nil,
         localDeviceID: String? = nil,
-        localSerialNumber: String? = nil
+        localSerialNumber: String? = nil,
+        nanoStream: NanoKVMStreamSettings? = nil
     ) {
         self.id = id
         self.name = name
@@ -262,6 +267,7 @@ public struct Device: Codable, Hashable, Identifiable, Sendable {
         self.certificateTrust = certificateTrust
         self.localDeviceID = localDeviceID
         self.localSerialNumber = localSerialNumber
+        self.nanoStream = nanoStream
     }
 
     /// Records what the first successful connection saw: a CA-issued

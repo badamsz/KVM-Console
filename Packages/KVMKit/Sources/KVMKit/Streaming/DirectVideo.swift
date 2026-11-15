@@ -6,17 +6,50 @@ import ImageIO
 import UniformTypeIdentifiers
 import VideoToolbox
 
-// H.264 video from a NanoKVM's `/api/stream/h264/direct` websocket. Newer
-// Sipeed firmware (NanoKVM Go) has no MJPEG stream, only this and WebRTC.
+// H.264 or H.265 video from a NanoKVM's `/api/stream/h264/direct` or
+// `/api/stream/h265/direct` websocket. Newer Sipeed firmware (NanoKVM Go)
+// has no MJPEG stream, only these and WebRTC. The NanoKVM Pro and Go encode
+// one stream type at a time: opening either socket switches the encoder to
+// that codec, and a socket of the other codec gets no more frames.
 //
-// Each binary message is one encoded frame:
+// Each binary message is one encoded frame, the same for both codecs:
 //   byte 0      1 for a keyframe, else 0
 //   bytes 1-8   timestamp in microseconds, unsigned little endian
 //   bytes 9...  the frame as Annex B NAL units (start-code separated)
 // Text messages are JSON notices, e.g. `{"event":"video-status","data":"-1"}`.
+// (The NanoKVM Pro source only sends them on the H.264 socket.)
 
-/// One message of the direct H.264 stream.
-public struct H264DirectFrame: Equatable, Sendable {
+/// The codec of a NanoKVM's direct video stream.
+public enum DirectVideoCodec: String, Codable, CaseIterable, Sendable, Identifiable {
+    case h264
+    case h265
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .h264: return "H.264"
+        case .h265: return "H.265"
+        }
+    }
+
+    /// The websocket's path on the device.
+    var path: String {
+        switch self {
+        case .h264: return "api/stream/h264/direct"
+        case .h265: return "api/stream/h265/direct"
+        }
+    }
+
+    /// An unknown value (say, from a newer build) decodes as H.264.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = DirectVideoCodec(rawValue: raw) ?? .h264
+    }
+}
+
+/// One message of a direct video stream.
+public struct DirectVideoFrame: Equatable, Sendable {
     public let isKeyFrame: Bool
     public let timestamp: UInt64
     public let annexB: Data
@@ -82,6 +115,11 @@ public enum AnnexB {
         (unit.first ?? 0) & 0x1F
     }
 
+    /// The H.265 NAL unit type (bits 1-6 of the first byte).
+    public static func hevcType(of unit: Data) -> UInt8 {
+        ((unit.first ?? 0) >> 1) & 0x3F
+    }
+
     /// Length-prefixed (AVCC) form of the units, as VideoToolbox decodes.
     public static func avcc(_ units: [Data]) -> Data {
         var out = Data()
@@ -94,16 +132,57 @@ public enum AnnexB {
     }
 }
 
-/// Decodes H.264 Annex B frames to images with VideoToolbox. Not thread
-/// safe: feed it from one queue.
-public final class H264Decoder {
+/// What a decoder needs to know about one NAL unit.
+enum NALRole: Equatable {
+    /// A parameter set, by its index in the format description (H.264: SPS,
+    /// PPS; H.265: VPS, SPS, PPS).
+    case parameterSet(Int)
+    /// Dropped: access unit delimiters.
+    case skip
+    /// Slice data; `random` when decoding can start here.
+    case slice(random: Bool)
+}
+
+extension DirectVideoCodec {
+    var parameterSetCount: Int { self == .h264 ? 2 : 3 }
+
+    func role(of unit: Data) -> NALRole {
+        switch self {
+        case .h264:
+            switch AnnexB.type(of: unit) {
+            case 7: return .parameterSet(0)
+            case 8: return .parameterSet(1)
+            case 9: return .skip
+            case 5: return .slice(random: true)
+            default: return .slice(random: false)
+            }
+        case .h265:
+            switch AnnexB.hevcType(of: unit) {
+            case 32: return .parameterSet(0)
+            case 33: return .parameterSet(1)
+            case 34: return .parameterSet(2)
+            case 35: return .skip
+            // IRAP pictures: BLA, IDR and CRA (16-21), plus the reserved 22-23.
+            case 16...23: return .slice(random: true)
+            default: return .slice(random: false)
+            }
+        }
+    }
+}
+
+/// Decodes H.264 or H.265 Annex B frames to images with VideoToolbox. Not
+/// thread safe: feed it from one queue.
+public final class DirectVideoDecoder {
+    public let codec: DirectVideoCodec
     private var session: VTDecompressionSession?
     private var format: CMVideoFormatDescription?
-    private var sps: Data?
-    private var pps: Data?
+    private var parameterSets: [Data?]
     private var waitingForKeyFrame = true
 
-    public init() {}
+    public init(codec: DirectVideoCodec = .h264) {
+        self.codec = codec
+        parameterSets = Array(repeating: nil, count: codec.parameterSetCount)
+    }
 
     deinit { invalidate() }
 
@@ -114,26 +193,27 @@ public final class H264Decoder {
 
     /// Decodes one frame. Returns nil until a keyframe with its parameter
     /// sets has arrived, and for frames that fail to decode.
-    public func decode(_ frame: H264DirectFrame) -> CGImage? {
+    public func decode(_ frame: DirectVideoFrame) -> CGImage? {
         var units: [Data] = []
-        var newSPS: Data?, newPPS: Data?
+        var newSets = parameterSets
+        var hasRandomAccess = false
         for unit in AnnexB.nalUnits(frame.annexB) {
-            switch AnnexB.type(of: unit) {
-            case 7: newSPS = unit
-            case 8: newPPS = unit
-            case 9: break // access unit delimiter
-            default: units.append(unit)
+            switch codec.role(of: unit) {
+            case .parameterSet(let index): newSets[index] = unit
+            case .skip: break
+            case .slice(let random):
+                units.append(unit)
+                if random { hasRandomAccess = true }
             }
         }
-        if let newSPS, let newPPS, newSPS != sps || newPPS != pps {
-            sps = newSPS
-            pps = newPPS
+        if newSets != parameterSets {
+            parameterSets = newSets
             invalidate()
-            format = Self.makeFormat(sps: newSPS, pps: newPPS)
+            let complete = newSets.compactMap { $0 }
+            format = complete.count == newSets.count ? Self.makeFormat(codec: codec, parameterSets: complete) : nil
         }
-        let hasIDR = units.contains { AnnexB.type(of: $0) == 5 }
         if waitingForKeyFrame {
-            guard hasIDR || frame.isKeyFrame else { return nil }
+            guard hasRandomAccess || frame.isKeyFrame else { return nil }
         }
         guard let format, !units.isEmpty else { return nil }
         if session == nil { session = Self.makeSession(format: format) }
@@ -157,17 +237,30 @@ public final class H264Decoder {
         return image
     }
 
-    private static func makeFormat(sps: Data, pps: Data) -> CMVideoFormatDescription? {
-        let spsBytes = [UInt8](sps), ppsBytes = [UInt8](pps)
+    private static func makeFormat(codec: DirectVideoCodec, parameterSets: [Data]) -> CMVideoFormatDescription? {
+        // Copied into one buffer so the pointers stay valid for the call.
+        let buffers = parameterSets.map { [UInt8]($0) }
+        let storage = UnsafeMutablePointer<UInt8>.allocate(capacity: buffers.reduce(0) { $0 + $1.count })
+        defer { storage.deallocate() }
+        var pointers: [UnsafePointer<UInt8>] = []
+        var offset = 0
+        for bytes in buffers {
+            (storage + offset).initialize(from: bytes, count: bytes.count)
+            pointers.append(UnsafePointer(storage + offset))
+            offset += bytes.count
+        }
+        let sizes = buffers.map(\.count)
         var format: CMVideoFormatDescription?
-        let status = spsBytes.withUnsafeBufferPointer { s in
-            ppsBytes.withUnsafeBufferPointer { p in
-                let pointers = [s.baseAddress!, p.baseAddress!]
-                let sizes = [s.count, p.count]
-                return CMVideoFormatDescriptionCreateFromH264ParameterSets(
-                    allocator: kCFAllocatorDefault, parameterSetCount: 2, parameterSetPointers: pointers,
-                    parameterSetSizes: sizes, nalUnitHeaderLength: 4, formatDescriptionOut: &format)
-            }
+        let status: OSStatus
+        switch codec {
+        case .h264:
+            status = CMVideoFormatDescriptionCreateFromH264ParameterSets(
+                allocator: kCFAllocatorDefault, parameterSetCount: pointers.count, parameterSetPointers: pointers,
+                parameterSetSizes: sizes, nalUnitHeaderLength: 4, formatDescriptionOut: &format)
+        case .h265:
+            status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
+                allocator: kCFAllocatorDefault, parameterSetCount: pointers.count, parameterSetPointers: pointers,
+                parameterSetSizes: sizes, nalUnitHeaderLength: 4, extensions: nil, formatDescriptionOut: &format)
         }
         return status == noErr ? format : nil
     }
@@ -207,12 +300,13 @@ public final class H264Decoder {
     }
 }
 
-/// Reads a NanoKVM's direct H.264 stream and delivers decoded frames.
-public final class H264DirectStreamer: @unchecked Sendable {
+/// Reads a NanoKVM's direct H.264 or H.265 stream and delivers decoded frames.
+public final class DirectVideoStreamer: @unchecked Sendable {
     public typealias FrameHandler = @Sendable (CGImage) -> Void
     public typealias StatusHandler = @Sendable (NanoKVMVideoStatus) -> Void
     public typealias EndHandler = @Sendable (Error?) -> Void
 
+    public let codec: DirectVideoCodec
     private let socket: URLSessionWebSocketTask
     private let onFrame: FrameHandler
     private let onStatus: StatusHandler
@@ -221,9 +315,10 @@ public final class H264DirectStreamer: @unchecked Sendable {
     private let lock = NSLock()
     private var stopped = false
 
-    public init(client: NanoKVMClient, onFrame: @escaping FrameHandler,
+    public init(client: NanoKVMClient, codec: DirectVideoCodec = .h264, onFrame: @escaping FrameHandler,
                 onStatus: @escaping StatusHandler = { _ in }, onEnd: @escaping EndHandler) throws {
-        self.socket = try client.h264DirectSocket()
+        self.codec = codec
+        self.socket = try client.directVideoSocket(codec)
         self.onFrame = onFrame
         self.onStatus = onStatus
         self.onEnd = onEnd
@@ -232,14 +327,15 @@ public final class H264DirectStreamer: @unchecked Sendable {
     public func start() {
         socket.resume()
         let socket = self.socket
+        let codec = self.codec
         task = Task.detached { [weak self] in
-            let decoder = H264Decoder()
+            let decoder = DirectVideoDecoder(codec: codec)
             defer { decoder.invalidate() }
             do {
                 while !Task.isCancelled {
                     switch try await socket.receive() {
                     case .data(let data):
-                        if let frame = H264DirectFrame(message: data), let image = decoder.decode(frame) {
+                        if let frame = DirectVideoFrame(message: data), let image = decoder.decode(frame) {
                             self?.onFrame(image)
                         }
                     case .string(let text):

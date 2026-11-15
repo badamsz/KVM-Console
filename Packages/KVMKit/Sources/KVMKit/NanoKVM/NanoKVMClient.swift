@@ -14,9 +14,11 @@ import Foundation
 //   Pro and Go take it plain.
 // * Responses are `{code, msg, data}` with HTTP 200; `code` 0 is success.
 // * Video: MJPEG at `/api/stream/mjpeg` (no separate session socket needed).
-//   Newer firmware (NanoKVM Go) has no MJPEG; it streams H.264 frames over
-//   the `/api/stream/h264/direct` websocket (`H264DirectStreamer`). Its
-//   WebRTC signalling is its own, not Janus; not supported here yet.
+//   Newer firmware (NanoKVM Go) has no MJPEG; it streams H.264 or H.265
+//   frames over the `/api/stream/h264/direct` or `/api/stream/h265/direct`
+//   websocket (`DirectVideoStreamer`), tuned with `/api/stream/mode`,
+//   `rate-control`, `quality`, `gop` and `fps` (`NanoKVMStreamSettings`).
+//   Its WebRTC signalling is its own, not Janus; not supported here yet.
 // * HID: binary messages on `/api/ws`, a type byte followed by a standard USB
 //   HID report (`HIDReport`), since NanoKVM 2.3.2. The H.264-only firmware's
 //   web page wraps reports in input router messages (`NanoKVMInputRouter`).
@@ -332,8 +334,9 @@ public final class NanoKVMClient: @unchecked Sendable {
     public enum VideoTransport: Sendable, Equatable {
         /// `/api/stream/mjpeg`, with type-byte HID messages (`NanoKVMMessage`).
         case mjpeg
-        /// `/api/stream/h264/direct` only, with input router messages
-        /// (`NanoKVMInputRouter`). Newer firmware such as the NanoKVM Go's.
+        /// `/api/stream/h264/direct` or `/api/stream/h265/direct` only, with
+        /// input router messages (`NanoKVMInputRouter`). Newer firmware such
+        /// as the NanoKVM Go's.
         case h264Direct
     }
 
@@ -363,9 +366,38 @@ public final class NanoKVMClient: @unchecked Sendable {
         return result
     }
 
-    /// The direct H.264 stream socket. See `H264DirectStreamer`.
-    public func h264DirectSocket() throws -> URLSessionWebSocketTask {
-        try webSocket("api/stream/h264/direct")
+    /// A direct video stream socket. See `DirectVideoStreamer`.
+    public func directVideoSocket(_ codec: DirectVideoCodec) throws -> URLSessionWebSocketTask {
+        try webSocket(codec.path)
+    }
+
+    private var _streamingCodec: DirectVideoCodec = .h264
+
+    /// The codec the console streams. The device encodes one codec at a
+    /// time, so `snapshot()` uses the same one rather than switching the
+    /// encoder away from an open console.
+    public var streamingCodec: DirectVideoCodec {
+        get { lock.lock(); defer { lock.unlock() }; return _streamingCodec }
+        set { lock.lock(); _streamingCodec = newValue; lock.unlock() }
+    }
+
+    /// Sends the encoder settings for a direct stream before it opens: the
+    /// stream mode always, the rest when set. The device keeps them only in
+    /// memory and can't report them, and its web page sends its own on
+    /// every visit, so they are sent on every connect. Returns the settings
+    /// the device refused, by name; the stream may still work without them.
+    @discardableResult
+    public func applyStreamSettings(_ settings: NanoKVMStreamSettings,
+                                    codec: DirectVideoCodec) async -> [String] {
+        var failed: [String] = []
+        for request in settings.requests(codec: codec) {
+            do {
+                _ = try await call(NanoKVMIgnored.self, request.path, method: "POST", body: request.body.mapValues { $0.base })
+            } catch {
+                failed.append(request.name)
+            }
+        }
+        return failed
     }
 
     /// The MJPEG stream request, for `MJPEGStreamer(request:trust:...)`.
@@ -428,7 +460,7 @@ public final class NanoKVMClient: @unchecked Sendable {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
                 box.begin(continuation)
                 do {
-                    let streamer = try H264DirectStreamer(client: self, onFrame: { image in
+                    let streamer = try DirectVideoStreamer(client: self, codec: streamingCodec, onFrame: { image in
                         if let jpeg = JPEG.data(from: image) { box.finish(.success(jpeg)) }
                     }, onStatus: { status in
                         if status == .noImage {
@@ -458,11 +490,11 @@ private final class SnapshotBox: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, Error>?
     private var done = false
-    var h264: H264DirectStreamer? {
+    var h264: DirectVideoStreamer? {
         get { lock.lock(); defer { lock.unlock() }; return _h264 }
         set { lock.lock(); _h264 = newValue; let stop = done; lock.unlock(); if stop { newValue?.stop() } }
     }
-    private var _h264: H264DirectStreamer?
+    private var _h264: DirectVideoStreamer?
     var streamer: MJPEGStreamer? {
         get { lock.lock(); defer { lock.unlock() }; return _streamer }
         set { lock.lock(); _streamer = newValue; let stop = done; lock.unlock(); if stop { newValue?.stop() } }

@@ -38,6 +38,7 @@ private struct ConsoleContent: View {
     @State private var pendingPower: PowerCommand?
     @AppStorage(ConsolePreferences.hideToolbarInFullScreenKey) private var hideToolbarInFullScreen = false
     @State private var powerActionRunning = false
+    @State private var editingStream = false
 
     var body: some View {
         let session = app.session(for: model.selection.deviceID)
@@ -67,6 +68,11 @@ private struct ConsoleContent: View {
         .navigationTitle(model.target?.name ?? "Console")
         .navigationSubtitle(subtitle)
         .sheet(isPresented: Binding(get: { model.showingMedia }, set: { model.showingMedia = $0 })) { VirtualMediaView(deviceID: model.selection.deviceID).environment(app) }
+        .sheet(isPresented: $editingStream) {
+            NanoKVMStreamSettingsView(settings: model.device?.nanoStream ?? NanoKVMStreamSettings()) {
+                model.setStreamSettings($0)
+            }
+        }
         // The toolbar stays in full screen by default; View > Hide Toolbar in Full Screen gives the video the whole display.
         .toolbar(model.isFullScreen && hideToolbarInFullScreen ? .hidden : .automatic, for: .windowToolbar)
         .toolbar {
@@ -124,6 +130,28 @@ private struct ConsoleContent: View {
                         Label("Video", systemImage: "play.rectangle")
                     }
                     .help("Video mode")
+                }
+
+                if model.directVideo {
+                    let current = model.device?.nanoStream ?? NanoKVMStreamSettings()
+                    Menu {
+                        Picker("Codec", selection: Binding(get: { current.codec }, set: { codec in
+                            var changed = current
+                            changed.codec = codec
+                            model.setStreamSettings(changed)
+                        })) {
+                            ForEach(DirectVideoCodec.allCases) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.inline)
+                        if let reason = model.fallbackReason {
+                            Text(reason)
+                        }
+                        Divider()
+                        Button("Stream Settings…") { editingStream = true }
+                    } label: {
+                        Label("Video", systemImage: "play.rectangle")
+                    }
+                    .help("Video codec and encoder settings for this NanoKVM")
                 }
 
                 if let side = model.sdCardSide {
