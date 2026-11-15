@@ -78,8 +78,14 @@ final class ConsoleModel {
     /// What the frames shown in `.mjpeg` mode are decoded from: "MJPEG", or
     /// "H.264" for a NanoKVM that only streams H.264.
     var frameCodec = "MJPEG"
-    /// Set when H.264 was requested but the console fell back to MJPEG.
+    /// Set when H.264 was requested but the console fell back to MJPEG, or
+    /// when a NanoKVM's H.265 stream fell back to H.264.
     var fallbackReason: String?
+    /// True while connected to a NanoKVM that streams H.264/H.265 directly
+    /// (NanoKVM Go), whose codec and encoder settings can be chosen.
+    var directVideo = false
+    /// H.265 showed no picture on this connection; use H.264 until reconnect.
+    var h265Unavailable = false
     /// The view WebRTC draws into, while H.264 is active.
     private(set) var webRTCView: NSView?
     /// Whether this PiKVM offers audio (only known in H.264 mode).
@@ -219,6 +225,7 @@ final class ConsoleModel {
     /// Drops the connection so the run loop connects again from scratch.
     func reconnect() {
         h264Unavailable = false
+        h265Unavailable = false
         fallbackReason = nil
         local?.finish(nil)
         socket?.cancel(with: .goingAway, reason: nil)
@@ -252,6 +259,15 @@ final class ConsoleModel {
         h264Unavailable = false
         fallbackReason = nil
         // Dropping the socket makes the run loop reconnect with the new mode.
+        socket?.cancel(with: .goingAway, reason: nil)
+    }
+
+    /// Saves a NanoKVM's direct stream settings (codec, encoder) and
+    /// reconnects so they take effect.
+    func setStreamSettings(_ settings: NanoKVMStreamSettings) {
+        app?.update(selection.deviceID) { $0.nanoStream = settings }
+        h265Unavailable = false
+        fallbackReason = nil
         socket?.cancel(with: .goingAway, reason: nil)
     }
 

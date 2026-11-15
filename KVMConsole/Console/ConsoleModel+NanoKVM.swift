@@ -3,16 +3,22 @@ import Foundation
 import KVMKit
 
 /// The console's connection to a Sipeed NanoKVM, NanoKVM Pro or NanoKVM Go:
-/// MJPEG video from `/api/stream/mjpeg` (or, on firmware without it, H.264
-/// from `/api/stream/h264/direct`), and keyboard and mouse as standard USB
-/// HID reports on the `/api/ws` socket.
+/// MJPEG video from `/api/stream/mjpeg` (or, on firmware without it, H.264 or
+/// H.265 from `/api/stream/h26x/direct`), and keyboard and mouse as standard
+/// USB HID reports on the `/api/ws` socket.
 @MainActor
 final class NanoKVMConsoleLink: ConsoleInput {
     let client: NanoKVMClient
     let socket: URLSessionWebSocketTask
     let transport: NanoKVMClient.VideoTransport
     private var streamer: MJPEGStreamer?
-    private var h264: H264DirectStreamer?
+    private var direct: DirectVideoStreamer?
+    /// The codec of the direct stream, once started.
+    private(set) var codec: DirectVideoCodec?
+    /// Whether the current direct stream has decoded a picture yet.
+    var sawFrame = false
+    /// Falls back to H.264 when H.265 shows nothing.
+    var watchdog: Task<Void, Never>?
     private var router = NanoKVMInputRouter()
     private let started = Date()
     private var heartbeat: Task<Void, Never>?
@@ -38,13 +44,11 @@ final class NanoKVMConsoleLink: ConsoleInput {
         }
     }
 
-    func startVideo(onFrame: @escaping @Sendable (CGImage) -> Void,
-                    onStatus: @escaping H264DirectStreamer.StatusHandler,
+    func startVideo(codec: DirectVideoCodec,
+                    onFrame: @escaping @Sendable (CGImage) -> Void,
+                    onStatus: @escaping DirectVideoStreamer.StatusHandler,
                     onEnd: @escaping MJPEGStreamer.EndHandler) throws {
-        streamer?.stop()
-        streamer = nil
-        h264?.stop()
-        h264 = nil
+        stopVideo()
         switch transport {
         case .mjpeg:
             let streamer = MJPEGStreamer(request: try client.mjpegRequest(), trust: client.effectiveTrustPolicy,
@@ -54,10 +58,22 @@ final class NanoKVMConsoleLink: ConsoleInput {
             self.streamer = streamer
             streamer.start()
         case .h264Direct:
-            let stream = try H264DirectStreamer(client: client, onFrame: onFrame, onStatus: onStatus, onEnd: onEnd)
-            h264 = stream
+            let stream = try DirectVideoStreamer(client: client, codec: codec, onFrame: onFrame,
+                                                 onStatus: onStatus, onEnd: onEnd)
+            direct = stream
+            self.codec = codec
+            sawFrame = false
             stream.start()
         }
+    }
+
+    private func stopVideo() {
+        watchdog?.cancel()
+        watchdog = nil
+        streamer?.stop()
+        streamer = nil
+        direct?.stop()
+        direct = nil
     }
 
     func stop() {
@@ -70,10 +86,7 @@ final class NanoKVMConsoleLink: ConsoleInput {
         }
         heartbeat?.cancel()
         heartbeat = nil
-        streamer?.stop()
-        streamer = nil
-        h264?.stop()
-        h264 = nil
+        stopVideo()
         socket.cancel(with: .goingAway, reason: nil)
     }
 
@@ -173,14 +186,17 @@ extension ConsoleModel {
         activeVideoMode = .mjpeg
         frameCodec = "MJPEG"
         fallbackReason = videoMode == .h264 ? "H.264 isn't supported for Sipeed devices yet." : nil
+        directVideo = false
         var wasLive = false
         do {
             let transport = try await client.videoTransport()
             guard gen == generation, !Task.isCancelled else { return false }
             if transport == .h264Direct {
                 // Decoded here rather than over WebRTC, so there's no audio.
-                frameCodec = "H.264"
-                fallbackReason = nil
+                directVideo = true
+                fallbackReason = h265Unavailable ? Self.h265FallbackReason : nil
+                await sendStreamSettings(client, codec: chosenDirectCodec)
+                guard gen == generation, !Task.isCancelled else { return false }
             }
             let link = try NanoKVMConsoleLink(client: client, transport: transport)
             nano = link
@@ -209,15 +225,61 @@ extension ConsoleModel {
     private func startNanoKVMVideo(_ link: NanoKVMConsoleLink, generation gen: Int) {
         guard gen == generation, nano === link else { return }
         do {
-            try link.startVideo(onFrame: { [weak self] image in
-                Task { @MainActor [weak self] in self?.receive(image, generation: gen) }
+            let codec = chosenDirectCodec
+            if link.transport == .h264Direct {
+                frameCodec = codec.displayName
+                link.client.streamingCodec = codec
+            }
+            try link.startVideo(codec: codec, onFrame: { [weak self, weak link] image in
+                Task { @MainActor [weak self, weak link] in
+                    link?.sawFrame = true
+                    self?.receive(image, generation: gen)
+                }
             }, onStatus: { [weak self] status in
                 Task { @MainActor [weak self] in self?.nanoKVMVideoStatus(status, generation: gen) }
             }, onEnd: { [weak self] error in
                 Task { @MainActor [weak self] in self?.nanoKVMVideoEnded(error, link: link, generation: gen) }
             })
+            if link.transport == .h264Direct, codec == .h265 {
+                link.watchdog = Task { [weak self, weak link] in
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    guard !Task.isCancelled, let self, let link, link.sawFrame == false else { return }
+                    self.fallBackToH264(link, generation: gen)
+                }
+            }
         } catch {
             state = .failed(error.localizedDescription)
+        }
+    }
+
+    static let h265FallbackReason = "The NanoKVM sent no H.265 picture, so this console uses H.264. Reconnect to try H.265 again."
+
+    /// The codec to stream: the device's choice, unless H.265 already failed
+    /// on this console.
+    var chosenDirectCodec: DirectVideoCodec {
+        let wanted = device?.nanoStream?.codec ?? .h264
+        return wanted == .h265 && h265Unavailable ? .h264 : wanted
+    }
+
+    /// Sends the device's saved encoder settings. Failures are logged, not
+    /// shown: the stream can work without them (older firmware may lack some).
+    func sendStreamSettings(_ client: NanoKVMClient, codec: DirectVideoCodec) async {
+        let settings = device?.nanoStream ?? NanoKVMStreamSettings()
+        let failed = await client.applyStreamSettings(settings, codec: codec)
+        if !failed.isEmpty {
+            NSLog("NanoKVM refused stream settings: %@", failed.joined(separator: ", "))
+        }
+    }
+
+    /// H.265 showed no picture (no such stream, or frames that don't decode):
+    /// use H.264 on this console until it reconnects.
+    private func fallBackToH264(_ link: NanoKVMConsoleLink, generation gen: Int) {
+        guard gen == generation, nano === link, link.codec == .h265 else { return }
+        h265Unavailable = true
+        fallbackReason = Self.h265FallbackReason
+        Task { [weak self] in
+            await self?.sendStreamSettings(link.client, codec: .h264)
+            self?.startNanoKVMVideo(link, generation: gen)
         }
     }
 
@@ -239,6 +301,11 @@ extension ConsoleModel {
             // The session expired: reconnect from scratch, which logs in again.
             app?.session(for: selection.deviceID).disconnect()
             socket?.cancel(with: .goingAway, reason: nil)
+            return
+        }
+        if link.codec == .h265, !link.sawFrame {
+            // E.g. a 404: this firmware has no H.265 stream.
+            fallBackToH264(link, generation: gen)
             return
         }
         Task { [weak self] in

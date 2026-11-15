@@ -96,7 +96,7 @@ The same tag also builds an App Store version and uploads it to App Store Connec
   - `PiKVM/`: the kvmd client (`/api/auth`, `/api/info`, `/api/atx`, `/api/hid`, `/api/msd`, `/api/switch`, `/api/ws`), Janus/WebRTC signalling, config editing and OS updates over the web terminal.
   - `NanoKVM/`: the Sipeed client and its adapters to the shared state types.
   - `Openterface/`: the CH9329 serial protocol.
-  - `Streaming/`: MJPEG and direct H.264 decoding.
+  - `Streaming/`: MJPEG and direct H.264/H.265 decoding.
   - `Discovery/`: Bonjour, subnet scan, HTTP fingerprints, Tailscale API.
   - `MCP/`: the loopback HTTP server, the MCP JSON-RPC endpoint with its access checks, the tool definitions (`KVMTool`) and key combination parsing.
 - `AppStore/`: Mac App Store listing text, review notes, privacy answers and the submission checklist. `docs/` holds the public privacy policy and support pages.
@@ -169,6 +169,7 @@ Add one with **Model** set to Sipeed NanoKVM (Cube, Lite, PCIe), Sipeed NanoKVM 
 What works:
 
 - Console with MJPEG video, keyboard, and absolute or relative mouse (saved per machine, like on a PiKVM). The NanoKVM takes standard USB HID reports over its `/api/ws` socket. Keyboard input needs NanoKVM 2.3.2 or newer.
+- On the NanoKVM Go, whose firmware has no MJPEG stream: H.264 or H.265 video from its direct stream (`/api/stream/h264/direct`, `/api/stream/h265/direct`), decoded with VideoToolbox. The console's **Video** menu picks the codec for that device (H.264 unless you choose H.265). **Stream Settings…** in the same menu can also set rate control (CBR or VBR), bitrate, keyframe interval (GOP) and frame rate. The NanoKVM keeps these only in memory and can't report them, so the app sends the codec and any settings you turned on every time it connects. Settings left off keep whatever the NanoKVM's web page last set. The device encodes one stream at a time, so a browser tab showing the NanoKVM's own page can take the stream away from the app. If H.265 shows no picture within 10 seconds, the console switches to H.264 until you reconnect. A screen that is off looks the same, because only the H.264 stream reports "no signal".
 - Paste as typing, through the NanoKVM's paste API. It always types with a US layout.
 - ATX power on NanoKVMs with the ATX board: power and disk lights, Power On and Shut Down (a short press of the power button, only when the light says it's needed), Force Off (an 8-second press) and Reset. Models without ATX show no power controls.
 - Virtual media (**Manage Images…**):
@@ -180,7 +181,7 @@ What works:
 - Screen preview.
 - **Configure NanoKVM…** shows and changes the device settings from the NanoKVM's own Settings page, through its HTTP API with the app's existing login: host name, web page title, SSH, mDNS, preview updates, OLED/LCD sleep, HID mode (keyboard and mouse only), mouse jiggler, USB network adapter, USB drive and microphone, HDMI capture (and its idle timeout on the classic NanoKVM), HDMI passthrough and EDID (Pro and Go), swap (classic), time zone and low power mode (Pro and Go), and reboot. Each setting is read separately and hidden when the device doesn't answer for it, which covers the differences between models and firmware versions. Changes apply at once; ones that interrupt the remote machine's USB or video ask first, and the Pro's first eMMC mount warns that it erases `/data`. Code: `NanoKVMSettings.swift` (KVMKit) and `NanoKVMSettingsView.swift`.
 
-Not yet: H.264 video and audio (they use NanoKVM's own WebRTC signalling), and microphone and camera passthrough.
+Not yet: WebRTC video and audio (they use NanoKVM's own WebRTC signalling), H.264/H.265 on the NanoKVM Pro (it uses MJPEG), and microphone and camera passthrough.
 
 Addresses: a NanoKVM serves plain HTTP unless HTTPS is turned on in its settings, while the Pro and Go use HTTPS with a self-signed certificate. The app tries HTTPS first and falls back to HTTP. After it has seen a certificate for the device it only uses HTTPS. To force one, write the scheme into the address, such as `http://192.168.1.60`. macOS only allows plain HTTP to IP addresses, `.local` and bare host names, and Tailscale `*.ts.net` names. Use HTTPS for any other host name.
 
