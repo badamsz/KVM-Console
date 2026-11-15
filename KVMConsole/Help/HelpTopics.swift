@@ -250,7 +250,7 @@ extension HelpTopic {
         The app asks first before:
         - Changing USB devices. The NanoKVM reconnects its USB, so the remote machine loses its keyboard and mouse for a moment. Changing to *Keyboard and mouse only* (or back) on a classic NanoKVM reboots it.
         - Choosing the built-in eMMC as the USB drive on a Pro or Go for the first time. That **erases the NanoKVM's /data folder**, including its ISO images.
-        - Changing the EDID, which looks to the remote machine like a new monitor.
+        - Changing the EDID, which looks to the remote machine like a new monitor. On a NanoKVM Go, a new EDID may only take effect, and the video may stay black, until the Go is unplugged from the remote machine and plugged in again; a reboot of the Go isn't enough.
         - Turning off HDMI capture, or turning off mDNS while the device's address is a `.local` name.
 
         **Reboot NanoKVM…** restarts the NanoKVM; the machine it controls keeps running. Choose **Reconnect** once it's back.
