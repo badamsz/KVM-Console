@@ -36,8 +36,9 @@ extension DeviceFamily {
     /// Can sit in front of a PiKVM Switch with one machine per port.
     public var supportsSwitch: Bool { self == .pikvm }
 
-    /// Has a configuration the app can read and edit (kvmd's override.yaml).
-    public var supportsConfigurationEditing: Bool { self == .pikvm }
+    /// Has settings the app can read and change: kvmd's override.yaml on a
+    /// PiKVM, the device settings API on a NanoKVM.
+    public var supportsConfigurationEditing: Bool { self == .pikvm || isSipeed }
 
     /// Can update its own OS from the app (`pikvm-update`).
     public var supportsOSUpdate: Bool { self == .pikvm }

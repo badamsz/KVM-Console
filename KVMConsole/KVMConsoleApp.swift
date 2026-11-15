@@ -139,8 +139,13 @@ struct ContentView: View {
                 .interactiveDismissDisabled()
         }
         .sheet(item: $model.configRequest) { request in
-            DeviceConfigView(deviceID: request.deviceID)
-                .interactiveDismissDisabled()
+            if model.device(request.deviceID)?.family.isSipeed == true {
+                NanoKVMSettingsView(deviceID: request.deviceID)
+                    .interactiveDismissDisabled()
+            } else {
+                DeviceConfigView(deviceID: request.deviceID)
+                    .interactiveDismissDisabled()
+            }
         }
         .alert("Error", isPresented: .constant(model.lastError != nil), presenting: model.lastError) { _ in
             Button("OK") { model.lastError = nil }

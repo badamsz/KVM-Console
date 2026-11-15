@@ -137,9 +137,11 @@ struct TargetDetailView: View {
             Button { model.editorRequest = .edit(device.id) } label: { Label("Edit Device", systemImage: "slider.horizontal.3") }
             if device.family.supportsConfigurationEditing {
                 Button { model.configRequest = ConfigRequest(deviceID: device.id) } label: {
-                    Label("Configure PiKVM", systemImage: "gearshape")
+                    Label("Configure \(device.family.shortName)", systemImage: "gearshape")
                 }
-                .help("View and change this PiKVM's settings (override.yaml)")
+                .help(device.family.isSipeed
+                      ? "View and change this NanoKVM's device settings"
+                      : "View and change this PiKVM's settings (override.yaml)")
             }
             if device.family.supportsOSUpdate {
                 Button { model.updateRequest = UpdateRequest(deviceID: device.id) } label: {
