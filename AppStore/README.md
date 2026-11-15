@@ -11,6 +11,7 @@ Everything needed to put KVM Console on the Mac App Store. The app side is ready
 | [../docs/support.md](../docs/support.md) | Support page (needs a public URL) |
 | [../KVMConsole/PrivacyInfo.xcprivacy](../KVMConsole/PrivacyInfo.xcprivacy) | Privacy manifest, bundled into the app |
 | [../scripts/ci/appstore.sh](../scripts/ci/appstore.sh) | CI: archive, sign and upload for the App Store |
+| [../scripts/appstore-screenshots.swift](../scripts/appstore-screenshots.swift) | Turns window captures into 2880×1800 store screenshots with captions |
 
 ## Sandbox review
 
@@ -65,7 +66,7 @@ Once enrollment finishes:
 
    One Admin key can also serve as the notary key (`NOTARY_API_*`), but separate keys are easier to revoke.
 5. **Publish the privacy policy and support pages.** App Store Connect needs public URLs. If the repository is public, the `docs/privacy.md` and `docs/support.md` GitHub links in listing.md work as they are. If it is private, turn on GitHub Pages for the `docs/` folder (Settings > Pages > Deploy from a branch > main, /docs; Pages on a private repository needs GitHub Pro) or host the two pages anywhere else, and use those URLs.
-6. **Take screenshots** (plan and sizes in listing.md) and record a short **demo video** for App Review, since reviewers have no KVM hardware. Optionally offer a demo PiKVM reachable from the internet with a throwaway account.
+6. **Take screenshots** (plan, capture steps and `scripts/appstore-screenshots.swift` in listing.md) and record a short **demo video** for App Review, since reviewers have no KVM hardware. Optionally offer a demo PiKVM reachable from the internet with a throwaway account.
 7. **Answer export compliance** (privacy-labels.md), then optionally set `ITSAppUsesNonExemptEncryption` so uploads stop asking.
 8. **Pick a price and availability** (free or paid, which countries).
 9. **Test through TestFlight first.** Push a tag or run the workflow with upload ticked, install the build from the TestFlight app on your Mac, and check: PiKVM and NanoKVM consoles, a step-ca device, Bonjour and Tailscale discovery, ISO upload, an Openterface over USB (video, audio, keyboard), and the AI Agents server with Claude.
