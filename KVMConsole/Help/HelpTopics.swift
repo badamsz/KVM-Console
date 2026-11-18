@@ -88,7 +88,7 @@ extension HelpTopic {
 
     static let console = HelpTopic(
         "console", title: "Using the Console", symbol: "display",
-        keywords: ["remote control", "full screen", "fullscreen", "video", "h.264", "webrtc", "mjpeg", "audio", "sound", "microphone", "camera", "webcam", "paste", "clipboard", "typing", "formatted paste", "indent", "indentation", "vs code", "code editor", "send keys", "ctrl+alt+del"],
+        keywords: ["remote control", "full screen", "fullscreen", "video", "h.264", "webrtc", "mjpeg", "audio", "sound", "microphone", "camera", "webcam", "paste", "clipboard", "typing", "formatted paste", "indent", "indentation", "vs code", "code editor", "send keys", "ctrl+alt+del", "key combos", "key combinations", "custom keys", "macro", "sysrq", "reisub", "tty", "virtual console", "win+l"],
         body: """
         Select a machine and choose **File > Open Console** (⌘↩), double-click the screen picture on its page, or use **Open Console** in the menu bar item. Each machine gets its own console window; opening it again brings that window forward.
 
@@ -102,7 +102,7 @@ extension HelpTopic {
         - **Audio**: mute and volume, shown when the PiKVM sends sound.
         - **Microphone and Camera**: send this Mac's microphone or camera to the remote machine. See below.
         - **Virtual Media** (the disc): mount ISO images. See [Virtual Media](help:virtual-media).
-        - **Send Keys**: key combinations macOS would otherwise keep, such as Ctrl+Alt+Del, Alt+Tab, Alt+F4, the Windows key, Ctrl+Alt+F1 and Print Screen, plus paste and typing speed.
+        - **Send Keys**: key combinations macOS would otherwise keep, such as Ctrl+Alt+Del, a library of common ones for Windows, macOS and Linux, and your own. Also paste and typing speed. See [Keyboard and Mouse](help:keyboard-mouse).
 
         ## Paste as typing
         **Console > Paste Clipboard as Typing** (⌥⌘V) types the text on the Mac's clipboard on the remote machine, key by key, so it works in a BIOS or installer too. Choose a slower **Typing Speed** in the Send Keys menu for BIOS screens and slow machines. Long text, or text with line breaks, asks first, and a progress bar with **Cancel** appears while it types.
@@ -139,7 +139,21 @@ extension HelpTopic {
         ## Keyboard
         While a console window is in front, keys go to the remote machine, including Command shortcuts: ⌘ is sent as the Windows (Super) key. Keys are sent by their position, so the remote machine's own keyboard layout decides which character appears.
 
-        macOS keeps a few combinations for itself, such as ⌘Tab and ⌘Space. Use the **Send Keys** menu in the toolbar to send Ctrl+Alt+Del and similar combinations.
+        macOS keeps a few combinations for itself, such as ⌘Tab and ⌘Space. Use the **Send Keys** menu in the toolbar, or **Console > Send Keys**, to send them.
+
+        ## Key combination library
+        The Send Keys menu has a submenu of common combinations for each system:
+        - **Windows**: Ctrl+Alt+Del, Task Manager, Lock (Win+L), Run, Alt+Tab, Alt+F4, Win+P and more.
+        - **macOS**: Force Quit (⌥⌘Esc), Lock Screen (⌃⌘Q), Spotlight, ⌘Tab, screenshots and more.
+        - **Linux**: Ctrl+Alt+F1 to F7 for the virtual consoles, Super+L, Ctrl+Alt+T, and Magic SysRq keys, including the REISUB safe reboot, which presses each step two seconds apart.
+
+        > Magic SysRq only works when the remote kernel allows it (the `kernel.sysrq` setting). Many distributions allow only some of the keys by default.
+
+        ## Your own key combinations
+        Choose **Edit My Key Combos…** in the Send Keys menu, or open **Settings > Key Combos**. Press **+** to make one, or **Add from Library** to copy a built-in one and change it. Yours appear at the top of the Send Keys menu, on every machine.
+        - Join keys with +, modifiers first: `ctrl+alt+delete`, `win+l`, `cmd+opt+esc`, `ctrl+alt+f2`.
+        - Separate steps with commas to press them one after another, such as `f2, enter`. Choose the pause between steps.
+        - **Labels for** only changes how keys are shown: ⌘ on macOS, Win on Windows, Super on Linux. The same keys are sent either way. ⌘, Win and Super are all the same key.
 
         Shortcuts that use **Control+Command** always stay on the Mac. That is why the console's own shortcuts all use it. See [Keyboard Shortcuts](help:shortcuts).
         """)

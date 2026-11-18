@@ -68,6 +68,10 @@ private struct ConsoleContent: View {
         .navigationTitle(model.target?.name ?? "Console")
         .navigationSubtitle(subtitle)
         .sheet(isPresented: Binding(get: { model.showingMedia }, set: { model.showingMedia = $0 })) { VirtualMediaView(deviceID: model.selection.deviceID).environment(app) }
+        .sheet(isPresented: Binding(get: { model.showingKeyCombos }, set: { model.showingKeyCombos = $0 })) {
+            KeyCombosEditorView { model.showingKeyCombos = false }
+                .frame(width: 560, height: 460)
+        }
         .sheet(isPresented: $editingStream) {
             NanoKVMStreamSettingsView(settings: model.device?.nanoStream ?? NanoKVMStreamSettings()) {
                 model.setStreamSettings($0)
@@ -224,12 +228,9 @@ private struct ConsoleContent: View {
                 }
 
                 Menu {
-                    Button("Ctrl+Alt+Del") { model.sendCombo(["ControlLeft", "AltLeft", "Delete"]) }
-                    Button("Alt+Tab") { model.sendCombo(["AltLeft", "Tab"]) }
-                    Button("Alt+F4") { model.sendCombo(["AltLeft", "F4"]) }
-                    Button("Windows Key") { model.sendCombo(["MetaLeft"]) }
-                    Button("Ctrl+Alt+F1") { model.sendCombo(["ControlLeft", "AltLeft", "F1"]) }
-                    Button("Print Screen") { model.sendCombo(["PrintScreen"]) }
+                    Button("Ctrl+Alt+Del (⌃⌘⌫)") { model.sendCombo(["ControlLeft", "AltLeft", "Delete"]) }
+                    KeyComboMenuItems { model.send($0) }
+                    Button("Edit My Key Combos…") { model.showingKeyCombos = true }
                     Divider()
                     Button("Paste Clipboard as Typing (⌥⌘V)") { model.pasteClipboard() }
                         .disabled(model.pasteProgress != nil)

@@ -70,6 +70,8 @@ final class ConsoleModel {
     var isFullScreen = false
     /// Shows the virtual media panel over this console.
     var showingMedia = false
+    /// Shows the editor for the user's own key combinations.
+    var showingKeyCombos = false
 
     /// The mode the user asked for.
     private(set) var videoMode = ConsolePreferences.videoMode
@@ -129,6 +131,8 @@ final class ConsoleModel {
         didSet { UserDefaults.standard.set(typingRate.rawValue, forKey: "console.typingRate") }
     }
     var pasteTask: Task<Void, Never>?
+    /// Presses the steps of a key sequence from the Send Keys menu.
+    private var keySequenceTask: Task<Void, Never>?
 
     weak var app: AppModel?
     var socket: URLSessionWebSocketTask?
@@ -184,6 +188,7 @@ final class ConsoleModel {
 
     func stop() {
         pasteTask?.cancel()
+        keySequenceTask?.cancel()
         runTask?.cancel()
         runTask = nil
         teardown()
@@ -632,6 +637,30 @@ final class ConsoleModel {
     /// Presses the keys in order, then releases them in reverse.
     func sendCombo(_ codes: [String]) {
         input?.combo(codes)
+    }
+
+    /// Sends a combination from the Send Keys menu. A sequence presses its
+    /// steps one after another with the item's delay between them; sending
+    /// another item stops a sequence still in progress.
+    func send(_ item: KeyComboItem) {
+        let steps: [[String]]
+        do { steps = try item.steps() } catch {
+            app?.lastError = "\(item.menuTitle): \(error.localizedDescription)"
+            return
+        }
+        keySequenceTask?.cancel()
+        keySequenceTask = nil
+        guard let first = steps.first else { return }
+        sendCombo(first)
+        guard steps.count > 1 else { return }
+        let delay = UInt64(item.clampedStepDelay * 1_000_000_000)
+        keySequenceTask = Task { [weak self] in
+            for step in steps.dropFirst() {
+                do { try await Task.sleep(nanoseconds: delay) } catch { return }
+                guard let self, self.input != nil else { return }
+                self.sendCombo(step)
+            }
+        }
     }
 
     func setMouseMode(_ mode: MouseMode) {
