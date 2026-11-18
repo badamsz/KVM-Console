@@ -55,6 +55,9 @@ struct AppCommands: Commands {
         CommandMenu("Console") {
             Button("Send Ctrl+Alt+Del") { model.frontConsole?.sendCombo(["ControlLeft", "AltLeft", "Delete"]) }
                 .keyboardShortcut(.delete, modifiers: [.control, .command])
+            Menu("Send Keys") {
+                KeyComboMenuItems { model.frontConsole?.send($0) }
+            }
             Button("Paste Clipboard as Typing") { model.frontConsole?.pasteClipboard() }
                 .keyboardShortcut("v", modifiers: [.option, .command])
             Button("Paste Clipboard as Formatted Typing") { model.frontConsole?.pasteClipboard(.formatted) }

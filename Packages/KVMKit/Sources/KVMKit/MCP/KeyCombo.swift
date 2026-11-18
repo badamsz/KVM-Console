@@ -76,6 +76,9 @@ public enum KeyCombo {
         "capslock": "CapsLock", "numlock": "NumLock", "scrolllock": "ScrollLock",
         "printscreen": "PrintScreen", "prtsc": "PrintScreen", "sysrq": "PrintScreen", "pause": "Pause", "break": "Pause",
         "menu": "ContextMenu", "apps": "ContextMenu", "plus": "Equal", "minus": "Minus",
+        "comma": "Comma", "period": "Period", "dot": "Period", "slash": "Slash", "backslash": "Backslash",
+        "semicolon": "Semicolon", "quote": "Quote", "backquote": "Backquote", "grave": "Backquote",
+        "equal": "Equal", "equals": "Equal",
     ]
 
     static let punctuation: [Character: String] = [

@@ -204,6 +204,9 @@ struct SettingsView: View {
         TabView {
             GeneralSettingsView()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            KeyCombosEditorView()
+                .frame(width: 560, height: 480)
+                .tabItem { Label("Key Combos", systemImage: "keyboard") }
             MCPSettingsView()
                 .frame(width: 560, height: 620)
                 .tabItem { Label("AI Agents", systemImage: "sparkles") }
